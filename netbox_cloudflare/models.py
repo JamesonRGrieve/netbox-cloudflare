@@ -7,7 +7,7 @@ fabric + the global ``cloudflare`` config-context the tofu module reads:
 * ``CloudflareRecord`` — a DNS record FK-ing a ``netbox_dns.Zone``; ``clean()`` enforces that
   exactly one of static ``content`` / ``tunnel`` / ``ddns`` drives the record's target.
 * ``CloudflareWAFRule`` — a per-zone WAF rule (expression + action), optionally matching an IP
-  list sourced from core ``ipam.Prefix`` rows.
+  list held in a ``netbox_pf`` ``Alias`` (the same named-list primitive the firewall uses).
 """
 
 from django.core.exceptions import ValidationError
@@ -179,7 +179,8 @@ class CloudflareRecord(NetBoxModel):
 
 class CloudflareWAFRule(NetBoxModel):
     """A per-zone Cloudflare WAF / rate-limit rule: an expression + action deployed into a
-    ruleset ``phase``, optionally matching an IP list sourced from core ``ipam.Prefix`` rows."""
+    ruleset ``phase``, optionally matching an IP list held in a ``netbox_pf`` ``Alias`` (the same
+    named-list primitive the firewall uses) and synced to Cloudflare as an account IP list."""
 
     zone = models.ForeignKey(
         "netbox_dns.Zone",
@@ -205,11 +206,14 @@ class CloudflareWAFRule(NetBoxModel):
     ratelimit_period = models.PositiveIntegerField(
         null=True, blank=True, help_text="Rate-limit counting window, in seconds."
     )
-    ip_prefixes = models.ManyToManyField(
-        "ipam.Prefix",
+    ip_alias = models.ForeignKey(
+        "netbox_pf.Alias",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
         related_name="cloudflare_waf_rules",
-        help_text="IP-list match source for this rule.",
+        help_text="Named pf alias (IPs/networks) this rule matches — synced to Cloudflare as an "
+        "account IP list referenced by $<alias name> in the rule expression.",
     )
 
     class Meta:

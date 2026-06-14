@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import django_filters
 from django.db.models import Q
-from ipam.models import Prefix
 from netbox.filtersets import NetBoxModelFilterSet
 from netbox_dns.models import Zone
+from netbox_pf.models import Alias
 
 from .choices import (
     CloudflareRecordTypeChoices,
@@ -73,8 +73,8 @@ class CloudflareWAFRuleFilterSet(NetBoxModelFilterSet):
     zone_id = django_filters.ModelMultipleChoiceFilter(
         field_name="zone", queryset=Zone.objects.all(), label="Zone (ID)"
     )
-    prefix_id = django_filters.ModelMultipleChoiceFilter(
-        field_name="ip_prefixes", queryset=Prefix.objects.all(), label="IP prefix (ID)"
+    ip_alias_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="ip_alias", queryset=Alias.objects.all(), label="IP alias (ID)"
     )
     phase = django_filters.MultipleChoiceFilter(choices=CloudflareWAFPhaseChoices)
     action = django_filters.MultipleChoiceFilter(choices=CloudflareWAFActionChoices)

@@ -57,7 +57,9 @@ enforced in `clean()`.
 `UniqueConstraint(zone, name, type, content)`.
 
 ### CloudflareWAFRule
-A per-zone WAF / rate-limit rule, optionally matching an IP list sourced from core `ipam.Prefix`.
+A per-zone WAF / rate-limit rule, optionally matching an IP list held in a `netbox_pf` `Alias`
+(the same named-list primitive the firewall uses), synced to Cloudflare as an account IP list
+referenced by `$<alias name>` in the rule expression.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -70,22 +72,22 @@ A per-zone WAF / rate-limit rule, optionally matching an IP list sourced from co
 | `enabled` | bool (true) | |
 | `ratelimit_threshold` | positive int null | requests before action fires |
 | `ratelimit_period` | positive int null | window in seconds |
-| `ip_prefixes` | M2M `ipam.Prefix` | IP-list match source |
+| `ip_alias` | FK `netbox_pf.Alias` (PROTECT, null) | named IP list; synced as the account list `$<alias name>` references |
 
 `UniqueConstraint(zone, order)`.
 
 ## Depends on
 
-`netbox_dns` (PyPI `netbox-plugin-dns`) must be installed and enabled — it is declared via
-`required_plugins`, so NetBox refuses to start this plugin without it. `CloudflareRecord` and
-`CloudflareWAFRule` FK its `Zone` model. The WAF IP-list match source is **core** `ipam.Prefix`,
-so no extra plugin dependency is needed for it.
+`netbox_dns` (PyPI `netbox-plugin-dns`) and `netbox_pf` must both be installed and enabled — they
+are declared via `required_plugins`, so NetBox refuses to start this plugin without them.
+`CloudflareRecord` and `CloudflareWAFRule` FK `netbox_dns`'s `Zone`; `CloudflareWAFRule.ip_alias`
+FKs `netbox_pf`'s `Alias` (the shared firewall named-list primitive).
 
 ## Install
 
 ```bash
 uv pip install --python /opt/netbox/venv/bin/python netbox-cloudflare   # or: pip install -e .
-# add "netbox_cloudflare" to PLUGINS in configuration.py (after "netbox_dns")
+# add "netbox_cloudflare" to PLUGINS in configuration.py (after "netbox_dns" and "netbox_pf")
 python manage.py migrate netbox_cloudflare
 python manage.py collectstatic --no-input
 systemctl restart netbox netbox-rq
@@ -94,7 +96,7 @@ systemctl restart netbox netbox-rq
 ## Develop / test
 
 Tests run against a **real NetBox test database** (no mocks) via NetBox's Django test framework,
-building real `netbox_dns` `Zone` (+ `NameServer`) and core `ipam` `Prefix` instances. See
+building real `netbox_dns` `Zone` (+ `NameServer`) and `netbox_pf` `Alias` instances. See
 `CLAUDE.md`.
 
 ```bash

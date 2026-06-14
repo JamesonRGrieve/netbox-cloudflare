@@ -35,6 +35,6 @@ class CloudflareRecordViewSet(NetBoxModelViewSet):
 
 
 class CloudflareWAFRuleViewSet(NetBoxModelViewSet):
-    queryset = CloudflareWAFRule.objects.prefetch_related("zone", "ip_prefixes", "tags")
+    queryset = CloudflareWAFRule.objects.prefetch_related("zone", "ip_alias", "tags")
     serializer_class = CloudflareWAFRuleSerializer
     filterset_class = filtersets.CloudflareWAFRuleFilterSet

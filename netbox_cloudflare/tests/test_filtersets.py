@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """FilterSet tests against a real DB (no mocks): explicit FK `_id` scoping + choice/bool filters
-across the four models. Real netbox_dns Zone + ipam Prefix instances back the FKs/M2M."""
+across the four models. Real netbox_dns Zone + netbox_pf Alias instances back the FKs."""
 
 from django.test import TestCase
 
@@ -22,7 +22,7 @@ from netbox_cloudflare.models import (
     CloudflareWAFRule,
 )
 
-from .factories import make_prefix, make_zone
+from .factories import make_alias, make_zone
 
 
 class CloudflareTunnelFilterSetTest(TestCase):
@@ -108,11 +108,10 @@ class CloudflareWAFRuleFilterSetTest(TestCase):
     def setUpTestData(cls):
         cls.z1 = make_zone("w1.example")
         cls.z2 = make_zone("w2.example")
-        cls.prefix = make_prefix("198.51.100.0/24")
-        r = CloudflareWAFRule.objects.create(
-            zone=cls.z1, phase=CloudflareWAFPhaseChoices.CUSTOM, expression="a", action=CloudflareWAFActionChoices.BLOCK, order=1
+        cls.alias = make_alias("exempt", "198.51.100.0/24")
+        CloudflareWAFRule.objects.create(
+            zone=cls.z1, phase=CloudflareWAFPhaseChoices.CUSTOM, expression="a", action=CloudflareWAFActionChoices.BLOCK, order=1, ip_alias=cls.alias
         )
-        r.ip_prefixes.add(cls.prefix)
         CloudflareWAFRule.objects.create(
             zone=cls.z1, phase=CloudflareWAFPhaseChoices.RATELIMIT, expression="b", action=CloudflareWAFActionChoices.LOG, order=2
         )
@@ -141,7 +140,7 @@ class CloudflareWAFRuleFilterSetTest(TestCase):
             2,
         )
 
-    def test_prefix_id(self):
+    def test_ip_alias_id(self):
         self.assertEqual(
-            CloudflareWAFRuleFilterSet({"prefix_id": [self.prefix.pk]}, self.queryset).qs.count(), 1
+            CloudflareWAFRuleFilterSet({"ip_alias_id": [self.alias.pk]}, self.queryset).qs.count(), 1
         )

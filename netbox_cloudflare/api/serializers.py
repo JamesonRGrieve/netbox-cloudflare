@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-from ipam.api.serializers import PrefixSerializer
 from netbox.api.serializers import NetBoxModelSerializer
 from netbox_dns.api.serializers import ZoneSerializer
+from netbox_pf.api.serializers import AliasSerializer
 from rest_framework import serializers
 
 from ..models import (
@@ -96,7 +96,7 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
         view_name="plugins-api:netbox_cloudflare-api:cloudflarewafrule-detail"
     )
     zone = ZoneSerializer(nested=True)
-    ip_prefixes = PrefixSerializer(nested=True, many=True, required=False)
+    ip_alias = AliasSerializer(nested=True, required=False, allow_null=True)
 
     class Meta:
         model = CloudflareWAFRule
@@ -113,7 +113,7 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
             "enabled",
             "ratelimit_threshold",
             "ratelimit_period",
-            "ip_prefixes",
+            "ip_alias",
             "tags",
             "custom_fields",
             "created",

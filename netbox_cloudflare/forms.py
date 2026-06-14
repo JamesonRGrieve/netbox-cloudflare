@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from django import forms
-from ipam.models import Prefix
 from netbox.forms import NetBoxModelFilterSetForm, NetBoxModelForm
 from netbox_dns.models import Zone
+from netbox_pf.models import Alias
 from utilities.forms.fields import (
     DynamicModelChoiceField,
     DynamicModelMultipleChoiceField,
@@ -101,13 +101,13 @@ class CloudflareRecordFilterForm(NetBoxModelFilterSetForm):
 
 class CloudflareWAFRuleForm(NetBoxModelForm):
     zone = DynamicModelChoiceField(queryset=Zone.objects.all())
-    ip_prefixes = DynamicModelMultipleChoiceField(queryset=Prefix.objects.all(), required=False)
+    ip_alias = DynamicModelChoiceField(queryset=Alias.objects.all(), required=False)
 
     fieldsets = (
         FieldSet("zone", "phase", "order", "enabled", name="Rule"),
         FieldSet("description", "expression", "action", name="Match"),
         FieldSet("ratelimit_threshold", "ratelimit_period", name="Rate limit"),
-        FieldSet("ip_prefixes", name="IP list"),
+        FieldSet("ip_alias", name="IP list"),
     )
 
     class Meta:
@@ -122,7 +122,7 @@ class CloudflareWAFRuleForm(NetBoxModelForm):
             "enabled",
             "ratelimit_threshold",
             "ratelimit_period",
-            "ip_prefixes",
+            "ip_alias",
             "tags",
         ]
 
@@ -132,8 +132,8 @@ class CloudflareWAFRuleFilterForm(NetBoxModelFilterSetForm):
     zone_id = DynamicModelMultipleChoiceField(
         queryset=Zone.objects.all(), required=False, label="Zone"
     )
-    prefix_id = DynamicModelMultipleChoiceField(
-        queryset=Prefix.objects.all(), required=False, label="IP prefix"
+    ip_alias_id = DynamicModelMultipleChoiceField(
+        queryset=Alias.objects.all(), required=False, label="IP alias"
     )
     phase = forms.MultipleChoiceField(choices=CloudflareWAFPhaseChoices, required=False)
     action = forms.MultipleChoiceField(choices=CloudflareWAFActionChoices, required=False)

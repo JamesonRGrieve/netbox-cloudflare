@@ -9,9 +9,9 @@ security rules**. It replaces the unstructured `config_context.apps` app-fabric 
 `cloudflare` config-context that the tofu module `opentofu/net/cloud/cloudflare/` reads today,
 turning each piece of Cloudflare intent into a real, choice-validated, REST/GraphQL-exposed row.
 
-It **depends on `netbox_dns`** (declared via `required_plugins`); `CloudflareRecord` and
-`CloudflareWAFRule` FK that plugin's `Zone`. The WAF IP-list match source is **core** `ipam.Prefix`
-(no extra plugin dependency for it).
+It **depends on `netbox_dns` and `netbox_pf`** (both declared via `required_plugins`):
+`CloudflareRecord` and `CloudflareWAFRule` FK `netbox_dns`'s `Zone`, and `CloudflareWAFRule.ip_alias`
+FKs `netbox_pf`'s `Alias` — the same named-list primitive the firewall uses — for its WAF IP list.
 
 ---
 
@@ -40,7 +40,7 @@ It **depends on `netbox_dns`** (declared via `required_plugins`); `CloudflareRec
 - Use bandaid fixes instead of fixing the core functionality.
 - **Mock the database, the ORM, the NetBox API test client, or any integration path.** Tests run
   against a **real test database** via NetBox's Django test framework — use real model instances
-  (including real `netbox_dns` `Zone`/`NameServer` and core `ipam` `Prefix`) and real API
+  (including real `netbox_dns` `Zone`/`NameServer` and `netbox_pf` `Alias`) and real API
   requests. Only pure utility functions may use mocks for isolation.
 
 ### Python / Django Guidelines:
@@ -48,7 +48,7 @@ It **depends on `netbox_dns`** (declared via `required_plugins`); `CloudflareRec
   `datetime.date`.
 - Imports are package-relative inside `netbox_cloudflare` (`from .models import CloudflareRecord`),
   never `from netbox_cloudflare.models import ...`. Imports of upstream plugins/core use their real
-  package paths (`from netbox_dns.models import Zone`, `from ipam.models import Prefix`).
+  package paths (`from netbox_dns.models import Zone`, `from netbox_pf.models import Alias`).
 - Models inherit `netbox.models.NetBoxModel` (custom fields, tags, journaling, change logging,
   GraphQL — for free).
 - **SPDX header on every source file**: `# SPDX-License-Identifier: AGPL-3.0-or-later`.
@@ -63,12 +63,12 @@ It **depends on `netbox_dns`** (declared via `required_plugins`); `CloudflareRec
 
 | File | Responsibility |
 |------|----------------|
-| `__init__.py` | `PluginConfig` — name `netbox_cloudflare`, `base_url='cloudflare'`, `required_plugins=["netbox_dns"]`, min/max NetBox version |
+| `__init__.py` | `PluginConfig` — name `netbox_cloudflare`, `base_url='cloudflare'`, `required_plugins=["netbox_dns", "netbox_pf"]`, min/max NetBox version |
 | `choices.py` | `CloudflareRecordTypeChoices` (A/AAAA/CNAME/TXT/MX/SRV), `CloudflareWAFPhaseChoices`, `CloudflareWAFActionChoices` — values match the `cloudflare/cloudflare` provider |
 | `models.py` | The four models (see §Models) |
 | `migrations/` | hand-authored (NetBox disables `makemigrations` in prod); verify with `makemigrations --check --dry-run` on an ephemeral NetBox |
 | `api/serializers.py`, `api/views.py`, `api/urls.py` | REST API (`NetBoxModelViewSet`) — endpoints `tunnels`, `ingress-rules`, `records`, `waf-rules` under `/api/plugins/cloudflare/` |
-| `filtersets.py` | `NetBoxModelFilterSet`: explicit `zone_id` / `tunnel_id` / `prefix_id` FK filters + `type`/`phase`/`action`/`proxied`/`ddns_enabled` choice/bool filters |
+| `filtersets.py` | `NetBoxModelFilterSet`: explicit `zone_id` / `tunnel_id` / `ip_alias_id` FK filters + `type`/`phase`/`action`/`proxied`/`ddns_enabled` choice/bool filters |
 | `tables.py`, `forms.py`, `navigation.py`, `views.py`, `urls.py` | UI layer |
 | `graphql/` | GraphQL types (none shipped yet — `NetBoxModel` still exposes auto GraphQL) |
 
@@ -85,14 +85,17 @@ It **depends on `netbox_dns`** (declared via `required_plugins`); `CloudflareRec
   type, content)`.
 - **CloudflareWAFRule**: FK `netbox_dns.Zone` (CASCADE, `waf_rules`), `phase`, `description`,
   `expression` (text), `action`, `order`, `enabled`, `ratelimit_threshold`/`ratelimit_period`
-  (null), M2M `ipam.Prefix` (`ip_prefixes`, the IP-list match source). `UniqueConstraint(zone,
+  (null), FK `netbox_pf.Alias` (`ip_alias`, PROTECT, null — the named IP list, the same primitive
+  the firewall uses, referenced as `$<alias name>` in the expression). `UniqueConstraint(zone,
   order)`.
 
 `zone` is PROTECT on records (a referenced zone can't be deleted out from under a record) and
-CASCADE on WAF rules (drop the zone, its rules go); `tunnel` CASCADEs ingress and SET_NULLs records.
+CASCADE on WAF rules (drop the zone, its rules go); `tunnel` CASCADEs ingress and SET_NULLs records;
+`ip_alias` is PROTECT (a referenced alias can't be deleted out from under a rule).
 The migration depends on netbox_dns's **latest** migration
-(`0030_dnsseckeytemplate_comments_dnsseckeytemplate_owner_and_more`) plus `extras 0001_initial` and
-`ipam 0001_initial` (the M2M target), so every referenced table exists before the CreateModels run.
+(`0030_dnsseckeytemplate_comments_dnsseckeytemplate_owner_and_more`) and netbox_pf's **latest**
+migration (`0003_gateways`, the `Alias` table) plus `extras 0001_initial`, so every referenced
+table exists before the CreateModels run.
 
 ### How this maps back to the tofu cloudflare module
 The tofu module (`opentofu/net/cloud/cloudflare/`) consumes this plugin's REST API instead of the
@@ -106,9 +109,10 @@ old config-context reads:
   `cloudflare_zero_trust_tunnel_cloudflared_config` (hostname→service ingress list with the
   `http_status:404` catch-all last) — replacing the `_tunnel_ingress` derivation in `tunnels.tf`.
 - **WAF** — `CloudflareWAFRule` rows feed `cloudflare_ruleset` (per-zone, per-`phase`) with
-  `expression`/`action`/`enabled`; `ratelimit_*` drive `http_ratelimit` rules; `ip_prefixes` source
-  the account-level `cloudflare_list` an expression references — replacing the
-  `security.custom_rules` / `exemption_ips` config-context keys in `cloudflare.tf`.
+  `expression`/`action`/`enabled`; `ratelimit_*` drive `http_ratelimit` rules; `ip_alias` (a
+  `netbox_pf.Alias`) sources the account-level `cloudflare_list` the expression references via
+  `$<alias name>` — replacing the `security.custom_rules` / `exemption_ips` config-context keys in
+  `cloudflare.tf`.
 
 ---
 
@@ -117,10 +121,10 @@ old config-context reads:
 - Tests live in `netbox_cloudflare/tests/` (inside the package, so `manage.py test
   netbox_cloudflare` discovers them and they ship with the plugin), one module per source module
   (`test_models.py`, `test_api.py`, `test_filtersets.py`) plus `factories.py`.
-- Build real upstream objects via `factories.make_zone()` / `make_prefix()`: a `Zone` needs a
+- Build real upstream objects via `factories.make_zone()` / `make_alias()`: a `Zone` needs a
   `NameServer` for its `soa_mname` and an `soa_rname` — its `view`, TTL and numeric SOA fields
-  auto-fill from netbox_dns plugin defaults in `Zone.clean_fields` (run by `Zone.save()`). A
-  `Prefix` needs only its CIDR.
+  auto-fill from netbox_dns plugin defaults in `Zone.clean_fields` (run by `Zone.save()`). An
+  `Alias` needs a unique `name` and a `type` (`AliasTypeChoices`); `content` holds its members.
 - Use NetBox's base classes from `utilities.testing`: `APIViewTestCases.APIViewTestCase` (composed
   CRUD mixins).
 - **Test isolation**: Django wraps each test in a transaction against a per-run test database with
@@ -130,9 +134,9 @@ old config-context reads:
 - **Run**: `python /opt/netbox/app/netbox/manage.py test netbox_cloudflare --keepdb -v2`
   (or `pytest` with `pytest-django` + `DJANGO_SETTINGS_MODULE=netbox.settings`).
 - **Coverage bar**: every model, serializer, filterset, and view has tests — including each
-  uniqueness constraint, the `CloudflareRecord.clean()` one-driver rule, the `ip_prefixes` M2M, and
+  uniqueness constraint, the `CloudflareRecord.clean()` one-driver rule, the `ip_alias` FK, and
   the FK delete behaviors (zone PROTECT on records, zone CASCADE on WAF rules, tunnel CASCADE on
-  ingress, tunnel SET_NULL on records).
+  ingress, tunnel SET_NULL on records, alias PROTECT on WAF rules).
 
 ---
 

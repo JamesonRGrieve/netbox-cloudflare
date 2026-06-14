@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Model tests against a real DB (no mocks): creation, str/url/color, uniqueness constraints,
-the CloudflareRecord.clean() one-driver rule, M2M to ipam.Prefix, and the FK delete behaviors
-(zone PROTECT on records, zone CASCADE on WAF rules, tunnel CASCADE on ingress, tunnel SET_NULL
-on records). Real netbox_dns Zone + ipam Prefix instances back everything."""
+the CloudflareRecord.clean() one-driver rule, the ip_alias FK to netbox_pf.Alias, and the FK
+delete behaviors (zone PROTECT on records, zone CASCADE on WAF rules, tunnel CASCADE on ingress,
+tunnel SET_NULL on records, ip_alias PROTECT on WAF rules). Real netbox_dns Zone + netbox_pf Alias
+instances back everything."""
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -22,7 +23,7 @@ from netbox_cloudflare.models import (
     CloudflareWAFRule,
 )
 
-from .factories import make_prefix, make_zone
+from .factories import make_alias, make_zone
 
 
 class CloudflareTunnelModelTest(TestCase):
@@ -189,12 +190,26 @@ class CloudflareWAFRuleModelTest(TestCase):
         zone.delete()
         self.assertFalse(CloudflareWAFRule.objects.filter(pk=pk).exists())
 
-    def test_ip_prefixes_m2m(self):
+    def test_ip_alias_fk(self):
+        alias = make_alias("exempt", "198.51.100.0/24\n203.0.113.0/24")
         rule = CloudflareWAFRule.objects.create(
-            zone=self.zone, expression="m", action=CloudflareWAFActionChoices.SKIP, order=10
+            zone=self.zone,
+            expression="m",
+            action=CloudflareWAFActionChoices.SKIP,
+            order=10,
+            ip_alias=alias,
         )
-        p1 = make_prefix("198.51.100.0/24")
-        p2 = make_prefix("203.0.113.0/24")
-        rule.ip_prefixes.set([p1, p2])
-        self.assertEqual(rule.ip_prefixes.count(), 2)
-        self.assertIn(rule, p1.cloudflare_waf_rules.all())
+        self.assertEqual(rule.ip_alias, alias)
+        self.assertIn(rule, alias.cloudflare_waf_rules.all())
+
+    def test_ip_alias_protect_on_delete(self):
+        alias = make_alias("protected-alias", "198.51.100.0/24")
+        CloudflareWAFRule.objects.create(
+            zone=self.zone,
+            expression="p",
+            action=CloudflareWAFActionChoices.BLOCK,
+            order=11,
+            ip_alias=alias,
+        )
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            alias.delete()

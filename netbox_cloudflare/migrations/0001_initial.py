@@ -4,12 +4,14 @@
 #
 # Dependencies:
 #   * extras 0001_initial — the TaggableManager through-table (extras.TaggedItem/extras.Tag).
-#   * ipam   0001_initial — the ipam.Prefix table, target of the CloudflareWAFRule.ip_prefixes M2M.
 #   * netbox_dns 0030 (the plugin's LATEST migration) — the Zone table FK-ed by CloudflareRecord
 #     (PROTECT) and CloudflareWAFRule (CASCADE). Depending on the leaf guarantees the Zone table
 #     plus every later alteration exists before these CreateModels run.
-# `0001_initial` resolves through Django's `replaces` aliasing to the squashed extras/ipam
-# migrations that ship with NetBox 4.6.
+#   * netbox_pf 0003_gateways (the plugin's LATEST migration) — the Alias table FK-ed by
+#     CloudflareWAFRule.ip_alias (PROTECT). Depending on the leaf guarantees the Alias table plus
+#     every later alteration exists before these CreateModels run.
+# `0001_initial` resolves through Django's `replaces` aliasing to the squashed extras migrations
+# that ship with NetBox 4.6.
 import django.db.models.deletion
 import taggit.managers
 import utilities.json
@@ -20,8 +22,8 @@ class Migration(migrations.Migration):
     initial = True
     dependencies = [
         ("extras", "0001_initial"),
-        ("ipam", "0001_initial"),
         ("netbox_dns", "0030_dnsseckeytemplate_comments_dnsseckeytemplate_owner_and_more"),
+        ("netbox_pf", "0003_gateways"),
     ]
     operations = [
         migrations.CreateModel(
@@ -152,9 +154,13 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "ip_prefixes",
-                    models.ManyToManyField(
-                        blank=True, related_name="cloudflare_waf_rules", to="ipam.prefix"
+                    "ip_alias",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="cloudflare_waf_rules",
+                        to="netbox_pf.alias",
                     ),
                 ),
                 (

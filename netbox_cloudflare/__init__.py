@@ -13,10 +13,11 @@ of Cloudflare intent becomes a real, choice-validated, REST/GraphQL-exposed row:
   a static ``content``, a ``tunnel`` (CNAME to ``<tunnel_id>.cfargotunnel.com``), or a dynamic
   ``ddns_source`` (content owned by a DDNS updater after creation).
 * ``CloudflareWAFRule`` — a per-zone WAF/ratelimit rule (expression + action), optionally
-  matching against an IP list sourced from core ``ipam.Prefix`` rows.
+  matching against an IP list held in a ``netbox_pf`` ``Alias`` (the same named-list primitive
+  the firewall uses), synced to Cloudflare as an account IP list referenced by ``$<alias name>``.
 
-DNS zones come from the ``netbox_dns`` plugin (declared via ``required_plugins``); the WAF
-IP-list match source is core IPAM, so no extra plugin dependency is needed for it.
+DNS zones come from the ``netbox_dns`` plugin and the WAF IP-list ``Alias`` from ``netbox_pf``
+(both declared via ``required_plugins``).
 """
 
 from netbox.plugins import PluginConfig
@@ -35,7 +36,7 @@ class NetBoxCloudflareConfig(PluginConfig):
     base_url = "cloudflare"
     min_version = "4.6.0"
     max_version = "4.6.99"
-    required_plugins = ["netbox_dns"]
+    required_plugins = ["netbox_dns", "netbox_pf"]
 
 
 config = NetBoxCloudflareConfig

@@ -3,10 +3,9 @@
 
 Composes the explicit CRUD mixins (not the GraphQL-inclusive APIViewTestCase) since the plugin
 ships no GraphQL type yet. Records carry exactly one target driver so CloudflareRecord.clean()
-passes on create; WAF rules include the ipam.Prefix M2M; ingress rules use distinct orders so the
-(tunnel, order) constraint never trips inside the create batch."""
+passes on create; one WAF rule references a netbox_pf.Alias via ip_alias; ingress rules use
+distinct orders so the (tunnel, order) constraint never trips inside the create batch."""
 
-from ipam.models import Prefix
 from utilities.testing import APIViewTestCases
 
 from netbox_cloudflare.models import (
@@ -16,7 +15,7 @@ from netbox_cloudflare.models import (
     CloudflareWAFRule,
 )
 
-from .factories import make_zone
+from .factories import make_alias, make_zone
 
 
 class _CRUD(
@@ -109,7 +108,7 @@ class CloudflareWAFRuleAPITest(_CRUD):
     @classmethod
     def setUpTestData(cls):
         zone = make_zone("waf-api.example")
-        cls.prefix = Prefix.objects.create(prefix="198.51.100.0/24")
+        cls.alias = make_alias("exempt", "198.51.100.0/24")
         CloudflareWAFRule.objects.bulk_create(
             [
                 CloudflareWAFRule(zone=zone, expression="a", action="block", order=1),
@@ -124,7 +123,7 @@ class CloudflareWAFRuleAPITest(_CRUD):
                 "expression": "(ip.src in $exempt)",
                 "action": "block",
                 "order": 10,
-                "ip_prefixes": [cls.prefix.pk],
+                "ip_alias": cls.alias.pk,
             },
             {
                 "zone": zone.pk,
