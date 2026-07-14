@@ -4,6 +4,11 @@ from netbox.tables import NetBoxTable, columns
 
 from .models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
@@ -117,3 +122,79 @@ class CloudflareWAFRuleTable(NetBoxTable):
             "last_updated",
         )
         default_columns = ("zone", "phase", "description", "action", "order", "enabled")
+
+
+class CloudflareMonitorTable(NetBoxTable):
+    name = tables.Column(linkify=True)
+    type = columns.ChoiceFieldColumn()
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflaremonitor_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareMonitor
+        fields = (
+            "pk", "id", "name", "account", "type", "method", "path", "port",
+            "expected_codes", "expected_body", "probe_zone", "interval", "timeout",
+            "retries", "consecutive_up", "consecutive_down", "follow_redirects",
+            "allow_insecure", "description", "tags", "created", "last_updated",
+        )
+        default_columns = ("name", "type", "path", "expected_codes", "interval", "retries")
+
+
+class CloudflareLBPoolTable(NetBoxTable):
+    name = tables.Column(linkify=True)
+    monitor = tables.Column(linkify=True)
+    enabled = columns.BooleanColumn()
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarelbpool_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareLBPool
+        fields = (
+            "pk", "id", "name", "account", "monitor", "enabled", "minimum_origins",
+            "notification_email", "description", "tags", "created", "last_updated",
+        )
+        default_columns = ("name", "monitor", "enabled", "minimum_origins", "description")
+
+
+class CloudflareLBOriginTable(NetBoxTable):
+    pool = tables.Column(linkify=True)
+    name = tables.Column(linkify=True)
+    enabled = columns.BooleanColumn()
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarelborigin_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareLBOrigin
+        fields = (
+            "pk", "id", "pool", "name", "address", "enabled", "weight", "tags",
+            "created", "last_updated",
+        )
+        default_columns = ("pool", "name", "address", "enabled", "weight")
+
+
+class CloudflareLoadBalancerTable(NetBoxTable):
+    name = tables.Column(linkify=True)
+    zone = tables.Column(linkify=True)
+    fallback_pool = tables.Column(linkify=True)
+    steering_policy = columns.ChoiceFieldColumn()
+    proxied = columns.BooleanColumn()
+    enabled = columns.BooleanColumn()
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflareloadbalancer_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareLoadBalancer
+        fields = (
+            "pk", "id", "zone", "name", "fallback_pool", "steering_policy",
+            "session_affinity", "proxied", "enabled", "ttl", "description", "tags",
+            "created", "last_updated",
+        )
+        default_columns = ("name", "zone", "steering_policy", "fallback_pool", "proxied", "enabled")
+
+
+class CloudflareLBDefaultPoolTable(NetBoxTable):
+    load_balancer = tables.Column(linkify=True)
+    pool = tables.Column(linkify=True)
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarelbdefaultpool_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareLBDefaultPool
+        fields = ("pk", "id", "load_balancer", "pool", "order", "tags", "created", "last_updated")
+        default_columns = ("load_balancer", "order", "pool")

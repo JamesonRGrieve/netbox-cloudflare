@@ -6,6 +6,11 @@ from rest_framework import serializers
 
 from ..models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
@@ -120,3 +125,147 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
             "last_updated",
         ]
         brief_fields = ["id", "url", "display", "zone", "phase", "action", "order"]
+
+
+class CloudflareMonitorSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflaremonitor-detail"
+    )
+
+    class Meta:
+        model = CloudflareMonitor
+        fields = [
+            "id",
+            "url",
+            "display",
+            "name",
+            "account",
+            "type",
+            "method",
+            "path",
+            "port",
+            "expected_codes",
+            "expected_body",
+            "header",
+            "probe_zone",
+            "interval",
+            "timeout",
+            "retries",
+            "consecutive_up",
+            "consecutive_down",
+            "follow_redirects",
+            "allow_insecure",
+            "description",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["id", "url", "display", "name", "type"]
+
+
+class CloudflareLBPoolSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflarelbpool-detail"
+    )
+    monitor = CloudflareMonitorSerializer(nested=True, required=False, allow_null=True)
+
+    class Meta:
+        model = CloudflareLBPool
+        fields = [
+            "id",
+            "url",
+            "display",
+            "name",
+            "account",
+            "monitor",
+            "enabled",
+            "minimum_origins",
+            "notification_email",
+            "description",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["id", "url", "display", "name", "enabled"]
+
+
+class CloudflareLBOriginSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflarelborigin-detail"
+    )
+    pool = CloudflareLBPoolSerializer(nested=True)
+
+    class Meta:
+        model = CloudflareLBOrigin
+        fields = [
+            "id",
+            "url",
+            "display",
+            "pool",
+            "name",
+            "address",
+            "enabled",
+            "weight",
+            "header",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["id", "url", "display", "pool", "name", "address"]
+
+
+class CloudflareLoadBalancerSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflareloadbalancer-detail"
+    )
+    zone = ZoneSerializer(nested=True)
+    fallback_pool = CloudflareLBPoolSerializer(nested=True, required=False, allow_null=True)
+
+    class Meta:
+        model = CloudflareLoadBalancer
+        fields = [
+            "id",
+            "url",
+            "display",
+            "zone",
+            "name",
+            "fallback_pool",
+            "steering_policy",
+            "session_affinity",
+            "proxied",
+            "enabled",
+            "ttl",
+            "description",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["id", "url", "display", "zone", "name", "enabled"]
+
+
+class CloudflareLBDefaultPoolSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflarelbdefaultpool-detail"
+    )
+    load_balancer = CloudflareLoadBalancerSerializer(nested=True)
+    pool = CloudflareLBPoolSerializer(nested=True)
+
+    class Meta:
+        model = CloudflareLBDefaultPool
+        fields = [
+            "id",
+            "url",
+            "display",
+            "load_balancer",
+            "pool",
+            "order",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["id", "url", "display", "load_balancer", "pool", "order"]

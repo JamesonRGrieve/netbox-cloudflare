@@ -22,3 +22,24 @@ def make_zone(name="example.com"):
 def make_alias(name="exempt", content="198.51.100.0/24"):
     """A real netbox_pf Alias (a named network list); `name` is unique, `type` is required."""
     return Alias.objects.create(name=name, type=AliasTypeChoices.NETWORK, content=content)
+
+
+def make_monitor(name="wp-https", **kwargs):
+    """A real CloudflareMonitor. An https monitor requires a path + expected_codes (clean())."""
+    from ..models import CloudflareMonitor
+
+    defaults = {
+        "account": "omg",
+        "type": "https",
+        "path": "/",
+        "expected_codes": "200",
+    }
+    return CloudflareMonitor.objects.create(name=name, **{**defaults, **kwargs})
+
+
+def make_pool(name="omg-origin", monitor=None, **kwargs):
+    from ..models import CloudflareLBPool
+
+    return CloudflareLBPool.objects.create(
+        name=name, account="omg", monitor=monitor, **kwargs
+    )

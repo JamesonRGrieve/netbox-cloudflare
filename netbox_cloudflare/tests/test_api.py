@@ -10,12 +10,17 @@ from utilities.testing import APIViewTestCases
 
 from netbox_cloudflare.models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
 )
 
-from .factories import make_alias, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_zone
 
 
 class _CRUD(
@@ -141,4 +146,118 @@ class CloudflareWAFRuleAPITest(_CRUD):
                 "action": "js_challenge",
                 "order": 30,
             },
+        ]
+
+
+class CloudflareMonitorAPITest(_CRUD):
+    model = CloudflareMonitor
+    brief_fields = ["display", "id", "name", "type", "url"]
+    bulk_update_data = {"retries": 3}
+
+    @classmethod
+    def setUpTestData(cls):
+        for i in range(3):
+            make_monitor(f"ex-mon{i}")
+        cls.create_data = [
+            {
+                "name": "wp-https", "account": "omg", "type": "https", "method": "GET",
+                "path": "/", "expected_codes": "200", "expected_body": "<html",
+                "probe_zone": "tolleytire.com", "interval": 60, "timeout": 5, "retries": 2,
+            },
+            {
+                "name": "wp-https-strict", "account": "omg", "type": "https", "path": "/",
+                "expected_codes": "2xx", "consecutive_down": 3, "consecutive_up": 2,
+            },
+            {"name": "mail-tcp", "account": "omg", "type": "tcp", "port": 25},
+        ]
+
+
+class CloudflareLBPoolAPITest(_CRUD):
+    model = CloudflareLBPool
+    brief_fields = ["display", "enabled", "id", "name", "url"]
+    bulk_update_data = {"enabled": False}
+
+    @classmethod
+    def setUpTestData(cls):
+        monitor = make_monitor("pool-api-mon")
+        for i in range(3):
+            make_pool(f"ex-pool{i}", monitor=monitor)
+        cls.create_data = [
+            {"name": "omg-origin", "account": "omg", "monitor": monitor.pk},
+            {"name": "house-origin", "account": "omg", "monitor": monitor.pk, "minimum_origins": 1},
+            {"name": "no-monitor", "account": "omg"},
+        ]
+
+
+class CloudflareLBOriginAPITest(_CRUD):
+    model = CloudflareLBOrigin
+    brief_fields = ["address", "display", "id", "name", "pool", "url"]
+    bulk_update_data = {"enabled": False}
+
+    @classmethod
+    def setUpTestData(cls):
+        pool = make_pool("origin-api-pool")
+        CloudflareLBOrigin.objects.bulk_create(
+            [
+                CloudflareLBOrigin(pool=pool, name=f"ex{i}", address=f"203.0.113.{i + 1}")
+                for i in range(3)
+            ]
+        )
+        cls.create_data = [
+            {
+                "pool": pool.pk, "name": "omg-wan", "address": "203.0.113.100",
+                "header": {"Host": ["tolleytire.com"]},
+            },
+            {"pool": pool.pk, "name": "house-wan", "address": "198.18.0.100", "weight": "0.500"},
+            {"pool": pool.pk, "name": "disabled", "address": "198.18.0.101", "enabled": False},
+        ]
+
+
+class CloudflareLoadBalancerAPITest(_CRUD):
+    model = CloudflareLoadBalancer
+    brief_fields = ["display", "enabled", "id", "name", "url", "zone"]
+    bulk_update_data = {"session_affinity": "cookie"}
+
+    @classmethod
+    def setUpTestData(cls):
+        zone = make_zone("tolleytire.com")
+        pool = make_pool("lb-api-pool")
+        CloudflareLoadBalancer.objects.bulk_create(
+            [
+                CloudflareLoadBalancer(zone=zone, name=f"ex{i}.tolleytire.com")
+                for i in range(3)
+            ]
+        )
+        cls.create_data = [
+            {"zone": zone.pk, "name": "tolleytire.com", "fallback_pool": pool.pk},
+            {"zone": zone.pk, "name": "www.tolleytire.com", "steering_policy": "off"},
+            {"zone": zone.pk, "name": "shop.tolleytire.com", "session_affinity": "cookie"},
+        ]
+
+
+class CloudflareLBDefaultPoolAPITest(_CRUD):
+    model = CloudflareLBDefaultPool
+    brief_fields = ["display", "id", "load_balancer", "order", "pool", "url"]
+    bulk_update_data = {"order": 50}
+
+    @classmethod
+    def setUpTestData(cls):
+        zone = make_zone("dp.example")
+        cls.lb = CloudflareLoadBalancer.objects.create(zone=zone, name="dp.example")
+        existing = [make_pool(f"dp-ex{i}") for i in range(3)]
+        CloudflareLBDefaultPool.objects.bulk_create(
+            [
+                CloudflareLBDefaultPool(load_balancer=cls.lb, pool=p, order=i + 1)
+                for i, p in enumerate(existing)
+            ]
+        )
+        # Each row needs a distinct (lb, order) AND a distinct (lb, pool), so give the created
+        # rows their own load balancers.
+        fresh = [make_pool(f"dp-new{i}") for i in range(3)]
+        lbs = [
+            CloudflareLoadBalancer.objects.create(zone=zone, name=f"new{i}.dp.example")
+            for i in range(3)
+        ]
+        cls.create_data = [
+            {"load_balancer": lbs[i].pk, "pool": fresh[i].pk, "order": i + 1} for i in range(3)
         ]

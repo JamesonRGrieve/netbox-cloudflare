@@ -31,6 +31,16 @@ menu = PluginMenu(
                 _item("cloudflareingress", "Ingress Rules"),
             ),
         ),
+        (
+            "Load Balancing",
+            (
+                _item("cloudflareloadbalancer", "Load Balancers"),
+                _item("cloudflarelbdefaultpool", "Default Pools"),
+                _item("cloudflarelbpool", "Pools"),
+                _item("cloudflarelborigin", "Origins"),
+                _item("cloudflaremonitor", "Monitors"),
+            ),
+        ),
     ),
     icon_class="mdi mdi-cloud",
 )

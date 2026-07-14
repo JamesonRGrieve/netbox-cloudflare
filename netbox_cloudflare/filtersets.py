@@ -6,12 +6,19 @@ from netbox_dns.models import Zone
 from netbox_pf.models import Alias
 
 from .choices import (
+    CloudflareLBSteeringChoices,
+    CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
 )
 from .models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
@@ -88,4 +95,101 @@ class CloudflareWAFRuleFilterSet(NetBoxModelFilterSet):
             Q(description__icontains=value)
             | Q(expression__icontains=value)
             | Q(zone__name__icontains=value)
+        )
+
+
+class CloudflareMonitorFilterSet(NetBoxModelFilterSet):
+    type = django_filters.MultipleChoiceFilter(choices=CloudflareMonitorTypeChoices)
+
+    class Meta:
+        model = CloudflareMonitor
+        fields = ["id", "name", "account", "path", "probe_zone", "interval", "retries"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value)
+            | Q(probe_zone__icontains=value)
+            | Q(description__icontains=value)
+        )
+
+
+class CloudflareLBPoolFilterSet(NetBoxModelFilterSet):
+    monitor_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="monitor", queryset=CloudflareMonitor.objects.all(), label="Monitor (ID)"
+    )
+
+    class Meta:
+        model = CloudflareLBPool
+        fields = ["id", "name", "account", "enabled", "minimum_origins"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value) | Q(description__icontains=value)
+        )
+
+
+class CloudflareLBOriginFilterSet(NetBoxModelFilterSet):
+    pool_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="pool", queryset=CloudflareLBPool.objects.all(), label="Pool (ID)"
+    )
+
+    class Meta:
+        model = CloudflareLBOrigin
+        fields = ["id", "name", "address", "enabled"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value)
+            | Q(address__icontains=value)
+            | Q(pool__name__icontains=value)
+        )
+
+
+class CloudflareLoadBalancerFilterSet(NetBoxModelFilterSet):
+    zone_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="zone", queryset=Zone.objects.all(), label="Zone (ID)"
+    )
+    fallback_pool_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="fallback_pool",
+        queryset=CloudflareLBPool.objects.all(),
+        label="Fallback pool (ID)",
+    )
+    # The default pools are reached through the ordered through-model, not a direct FK.
+    pool_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="pool_assignments__pool",
+        queryset=CloudflareLBPool.objects.all(),
+        label="Default pool (ID)",
+        distinct=True,
+    )
+    steering_policy = django_filters.MultipleChoiceFilter(choices=CloudflareLBSteeringChoices)
+
+    class Meta:
+        model = CloudflareLoadBalancer
+        fields = ["id", "name", "proxied", "enabled"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(
+            Q(name__icontains=value)
+            | Q(zone__name__icontains=value)
+            | Q(description__icontains=value)
+        )
+
+
+class CloudflareLBDefaultPoolFilterSet(NetBoxModelFilterSet):
+    load_balancer_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="load_balancer",
+        queryset=CloudflareLoadBalancer.objects.all(),
+        label="Load balancer (ID)",
+    )
+    pool_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="pool", queryset=CloudflareLBPool.objects.all(), label="Pool (ID)"
+    )
+
+    class Meta:
+        model = CloudflareLBDefaultPool
+        fields = ["id", "order"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(
+            Q(load_balancer__name__icontains=value) | Q(pool__name__icontains=value)
         )

@@ -3,7 +3,12 @@
 the CloudflareRecord.clean() one-driver rule, the ip_alias FK to netbox_pf.Alias, and the FK
 delete behaviors (zone PROTECT on records, zone CASCADE on WAF rules, tunnel CASCADE on ingress,
 tunnel SET_NULL on records, ip_alias PROTECT on WAF rules). Real netbox_dns Zone + netbox_pf Alias
-instances back everything."""
+instances back everything.
+
+The load-balancing tests additionally pin the failover semantics: a monitor's http/https probe
+requires a path + expected codes, a proxied LB refuses an explicit TTL, a DNS-only LB is rejected
+outright (it is never health-checked, so it cannot fail over), and the ordered default-pool list
+is unique per (lb, order) and per (lb, pool) — the order IS the failover priority."""
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -18,12 +23,16 @@ from netbox_cloudflare.choices import (
 )
 from netbox_cloudflare.models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
 )
 
-from .factories import make_alias, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_zone
 
 
 class CloudflareTunnelModelTest(TestCase):
@@ -213,3 +222,143 @@ class CloudflareWAFRuleModelTest(TestCase):
         )
         with self.assertRaises(ProtectedError), transaction.atomic():
             alias.delete()
+
+
+class CloudflareMonitorModelTest(TestCase):
+    def test_https_monitor_requires_path_and_codes(self):
+        m = CloudflareMonitor(name="m1", account="omg", type="https")
+        with self.assertRaises(ValidationError):
+            m.clean()
+
+    def test_tcp_monitor_needs_neither(self):
+        m = CloudflareMonitor(name="m-tcp", account="omg", type="tcp")
+        m.clean()  # must not raise
+        m.save()
+        self.assertEqual(str(m), "m-tcp")
+        self.assertIn("/plugins/cloudflare/monitors/", m.get_absolute_url())
+
+    def test_timeout_must_be_under_interval(self):
+        m = CloudflareMonitor(
+            name="m2", account="omg", type="https", path="/", expected_codes="200",
+            interval=5, timeout=5,
+        )
+        with self.assertRaises(ValidationError):
+            m.clean()
+
+    def test_defaults_and_color(self):
+        m = make_monitor("m3")
+        self.assertEqual(m.interval, 60)
+        self.assertEqual(m.retries, 2)
+        self.assertFalse(m.allow_insecure)
+        self.assertEqual(m.get_type_color(), "green")  # https
+
+    def test_unique_name(self):
+        make_monitor("dup")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            make_monitor("dup")
+
+
+class CloudflareLBPoolModelTest(TestCase):
+    def test_pool_protects_its_monitor(self):
+        monitor = make_monitor("m-protect")
+        make_pool("p-protect", monitor=monitor)
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            monitor.delete()
+
+    def test_origins_cascade_from_pool(self):
+        pool = make_pool("p-cascade")
+        origin = CloudflareLBOrigin.objects.create(
+            pool=pool, name="omg-wan", address="203.0.113.100"
+        )
+        pk = origin.pk
+        self.assertIn("203.0.113.100", str(origin))
+        pool.delete()
+        self.assertFalse(CloudflareLBOrigin.objects.filter(pk=pk).exists())
+
+    def test_origin_name_unique_per_pool(self):
+        pool = make_pool("p-uniq")
+        CloudflareLBOrigin.objects.create(pool=pool, name="wan", address="203.0.113.1")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CloudflareLBOrigin.objects.create(pool=pool, name="wan", address="203.0.113.2")
+
+    def test_same_origin_name_in_another_pool_allowed(self):
+        CloudflareLBOrigin.objects.create(
+            pool=make_pool("p-a"), name="wan", address="203.0.113.1"
+        )
+        o = CloudflareLBOrigin.objects.create(
+            pool=make_pool("p-b"), name="wan", address="198.18.0.1"
+        )
+        self.assertEqual(o.name, "wan")
+
+
+class CloudflareLoadBalancerModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.zone = make_zone("tolleytire.com")
+        cls.monitor = make_monitor("wp-https-lb")
+        cls.omg = make_pool("omg-origin-lb", monitor=cls.monitor)
+        cls.house = make_pool("house-origin-lb", monitor=cls.monitor)
+
+    def _lb(self, **kwargs):
+        return CloudflareLoadBalancer.objects.create(
+            zone=self.zone, name="tolleytire.com", **kwargs
+        )
+
+    def test_defaults_to_ordered_failover(self):
+        lb = self._lb()
+        lb.full_clean()
+        self.assertEqual(lb.steering_policy, "off")
+        self.assertTrue(lb.proxied)
+        self.assertEqual(lb.get_steering_policy_color(), "green")
+        self.assertIn("/plugins/cloudflare/load-balancers/", lb.get_absolute_url())
+
+    def test_proxied_lb_rejects_explicit_ttl(self):
+        lb = CloudflareLoadBalancer(zone=self.zone, name="x.tolleytire.com", proxied=True, ttl=300)
+        with self.assertRaises(ValidationError):
+            lb.clean()
+
+    def test_dns_only_lb_is_rejected(self):
+        # A DNS-only LB is never health-checked, so it cannot fail over.
+        lb = CloudflareLoadBalancer(zone=self.zone, name="y.tolleytire.com", proxied=False)
+        with self.assertRaises(ValidationError):
+            lb.clean()
+
+    def test_ordered_default_pools_are_the_failover_priority(self):
+        lb = self._lb()
+        CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=1)
+        CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.house, order=2)
+        self.assertEqual(
+            [a.pool.name for a in lb.pool_assignments.all()],
+            ["omg-origin-lb", "house-origin-lb"],
+        )
+
+    def test_one_pool_per_order(self):
+        lb = self._lb()
+        CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.house, order=1)
+
+    def test_pool_cannot_be_listed_twice(self):
+        lb = self._lb()
+        CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=2)
+
+    def test_assignments_cascade_from_lb(self):
+        lb = self._lb()
+        a = CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=1)
+        pk = a.pk
+        lb.delete()
+        self.assertFalse(CloudflareLBDefaultPool.objects.filter(pk=pk).exists())
+
+    def test_listed_pool_is_protected(self):
+        lb = self._lb()
+        CloudflareLBDefaultPool.objects.create(load_balancer=lb, pool=self.omg, order=1)
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            self.omg.delete()
+
+    def test_fallback_pool_is_protected(self):
+        lb = self._lb(fallback_pool=self.house)
+        self.assertEqual(lb.fallback_pool, self.house)
+        with self.assertRaises(ProtectedError), transaction.atomic():
+            self.house.delete()

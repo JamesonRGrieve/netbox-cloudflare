@@ -102,3 +102,128 @@ class CloudflareWAFRuleDeleteView(generic.ObjectDeleteView):
 class CloudflareWAFRuleBulkDeleteView(generic.BulkDeleteView):
     queryset = models.CloudflareWAFRule.objects.all()
     table = tables.CloudflareWAFRuleTable
+
+
+class CloudflareMonitorView(generic.ObjectView):
+    queryset = models.CloudflareMonitor.objects.all()
+
+
+class CloudflareMonitorListView(generic.ObjectListView):
+    queryset = models.CloudflareMonitor.objects.all()
+    table = tables.CloudflareMonitorTable
+    filterset = filtersets.CloudflareMonitorFilterSet
+    filterset_form = forms.CloudflareMonitorFilterForm
+
+
+class CloudflareMonitorEditView(generic.ObjectEditView):
+    queryset = models.CloudflareMonitor.objects.all()
+    form = forms.CloudflareMonitorForm
+
+
+class CloudflareMonitorDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareMonitor.objects.all()
+
+
+class CloudflareMonitorBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareMonitor.objects.all()
+    table = tables.CloudflareMonitorTable
+
+
+class CloudflareLBPoolView(generic.ObjectView):
+    queryset = models.CloudflareLBPool.objects.all()
+
+
+class CloudflareLBPoolListView(generic.ObjectListView):
+    queryset = models.CloudflareLBPool.objects.all()
+    table = tables.CloudflareLBPoolTable
+    filterset = filtersets.CloudflareLBPoolFilterSet
+    filterset_form = forms.CloudflareLBPoolFilterForm
+
+
+class CloudflareLBPoolEditView(generic.ObjectEditView):
+    queryset = models.CloudflareLBPool.objects.all()
+    form = forms.CloudflareLBPoolForm
+
+
+class CloudflareLBPoolDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareLBPool.objects.all()
+
+
+class CloudflareLBPoolBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareLBPool.objects.all()
+    table = tables.CloudflareLBPoolTable
+
+
+class CloudflareLBOriginView(generic.ObjectView):
+    queryset = models.CloudflareLBOrigin.objects.all()
+
+
+class CloudflareLBOriginListView(generic.ObjectListView):
+    queryset = models.CloudflareLBOrigin.objects.all()
+    table = tables.CloudflareLBOriginTable
+    filterset = filtersets.CloudflareLBOriginFilterSet
+    filterset_form = forms.CloudflareLBOriginFilterForm
+
+
+class CloudflareLBOriginEditView(generic.ObjectEditView):
+    queryset = models.CloudflareLBOrigin.objects.all()
+    form = forms.CloudflareLBOriginForm
+
+
+class CloudflareLBOriginDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareLBOrigin.objects.all()
+
+
+class CloudflareLBOriginBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareLBOrigin.objects.all()
+    table = tables.CloudflareLBOriginTable
+
+
+class CloudflareLoadBalancerView(generic.ObjectView):
+    queryset = models.CloudflareLoadBalancer.objects.all()
+
+
+class CloudflareLoadBalancerListView(generic.ObjectListView):
+    queryset = models.CloudflareLoadBalancer.objects.all()
+    table = tables.CloudflareLoadBalancerTable
+    filterset = filtersets.CloudflareLoadBalancerFilterSet
+    filterset_form = forms.CloudflareLoadBalancerFilterForm
+
+
+class CloudflareLoadBalancerEditView(generic.ObjectEditView):
+    queryset = models.CloudflareLoadBalancer.objects.all()
+    form = forms.CloudflareLoadBalancerForm
+
+
+class CloudflareLoadBalancerDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareLoadBalancer.objects.all()
+
+
+class CloudflareLoadBalancerBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareLoadBalancer.objects.all()
+    table = tables.CloudflareLoadBalancerTable
+
+
+class CloudflareLBDefaultPoolView(generic.ObjectView):
+    queryset = models.CloudflareLBDefaultPool.objects.all()
+
+
+class CloudflareLBDefaultPoolListView(generic.ObjectListView):
+    queryset = models.CloudflareLBDefaultPool.objects.all()
+    table = tables.CloudflareLBDefaultPoolTable
+    filterset = filtersets.CloudflareLBDefaultPoolFilterSet
+    filterset_form = forms.CloudflareLBDefaultPoolFilterForm
+
+
+class CloudflareLBDefaultPoolEditView(generic.ObjectEditView):
+    queryset = models.CloudflareLBDefaultPool.objects.all()
+    form = forms.CloudflareLBDefaultPoolForm
+
+
+class CloudflareLBDefaultPoolDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareLBDefaultPool.objects.all()
+
+
+class CloudflareLBDefaultPoolBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareLBDefaultPool.objects.all()
+    table = tables.CloudflareLBDefaultPoolTable

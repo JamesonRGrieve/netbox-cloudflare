@@ -16,13 +16,20 @@ of Cloudflare intent becomes a real, choice-validated, REST/GraphQL-exposed row:
   matching against an IP list held in a ``netbox_pf`` ``Alias`` (the same named-list primitive
   the firewall uses), synced to Cloudflare as an account IP list referenced by ``$<alias name>``.
 
+* ``CloudflareMonitor`` / ``CloudflareLBPool`` / ``CloudflareLBOrigin`` /
+  ``CloudflareLoadBalancer`` / ``CloudflareLBDefaultPool`` — **Load Balancing**: DNS-tier failover
+  that survives the total loss of an origin site (edge router, power, ISP), because the decision is
+  made at Cloudflare's edge rather than at an origin. With ``steering_policy = off`` a load
+  balancer's ordered default pools are tried in order and the first healthy one serves, so the
+  order *is* the failover priority.
+
 DNS zones come from the ``netbox_dns`` plugin and the WAF IP-list ``Alias`` from ``netbox_pf``
 (both declared via ``required_plugins``).
 """
 
 from netbox.plugins import PluginConfig
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 
 class NetBoxCloudflareConfig(PluginConfig):

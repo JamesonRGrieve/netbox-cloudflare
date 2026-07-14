@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Cloudflare intent models. Four ``NetBoxModel`` rows replace the ``config_context.apps``
-fabric + the global ``cloudflare`` config-context the tofu module reads:
+"""Cloudflare intent models, replacing the ``config_context.apps`` fabric + the global
+``cloudflare`` config-context the tofu module reads:
 
 * ``CloudflareTunnel`` / ``CloudflareIngress`` — the cloudflared daemon's tunnel + its ordered
   ingress ruleset (hostname→service; the ``http_status:404`` catch-all is the last ``order``).
@@ -8,6 +8,17 @@ fabric + the global ``cloudflare`` config-context the tofu module reads:
   exactly one of static ``content`` / ``tunnel`` / ``ddns`` drives the record's target.
 * ``CloudflareWAFRule`` — a per-zone WAF rule (expression + action), optionally matching an IP
   list held in a ``netbox_pf`` ``Alias`` (the same named-list primitive the firewall uses).
+
+Load balancing — DNS-tier failover, which survives the total loss of an origin site (its edge
+router, power, or ISP), unlike any load balancer running *at* that origin:
+
+* ``CloudflareMonitor`` — the health probe. The sensor everything else depends on.
+* ``CloudflareLBPool`` / ``CloudflareLBOrigin`` — an account-scoped origin pool and its members,
+  addressed by their **public** endpoints (what Cloudflare's edge can reach).
+* ``CloudflareLoadBalancer`` — a zone-scoped balanced hostname.
+* ``CloudflareLBDefaultPool`` — one position in that hostname's ordered pool list. With
+  ``steering_policy = off`` the order *is* the failover priority: order 1 primary, order 2
+  standby.
 """
 
 from django.core.exceptions import ValidationError
@@ -16,6 +27,10 @@ from django.urls import reverse
 from netbox.models import NetBoxModel
 
 from .choices import (
+    CloudflareLBSessionAffinityChoices,
+    CloudflareLBSteeringChoices,
+    CloudflareMonitorMethodChoices,
+    CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
@@ -236,3 +251,330 @@ class CloudflareWAFRule(NetBoxModel):
 
     def get_action_color(self):
         return CloudflareWAFActionChoices.colors.get(self.action)
+
+
+class CloudflareMonitor(NetBoxModel):
+    """An account-scoped load-balancer health monitor: the probe Cloudflare's edge runs against
+    every origin in every pool that references it.
+
+    This is the sensor the whole DNS-tier failover hangs off — an origin is only withdrawn from
+    service when this probe fails it, so ``retries``/``interval``/``timeout`` set how long a dead
+    site keeps being served. The probe must hit the **real user-visible surface** (the client's
+    own hostname over HTTPS, via ``probe_zone`` + a Host ``header``), not a loopback or an IP,
+    or it will report healthy while the site is down."""
+
+    name = models.CharField(max_length=100, unique=True)
+    account = models.CharField(
+        max_length=100, help_text="Cloudflare account id/slug that owns this monitor."
+    )
+    type = models.CharField(
+        max_length=16,
+        choices=CloudflareMonitorTypeChoices,
+        default=CloudflareMonitorTypeChoices.HTTPS,
+    )
+    method = models.CharField(
+        max_length=8,
+        choices=CloudflareMonitorMethodChoices,
+        default=CloudflareMonitorMethodChoices.GET,
+        blank=True,
+        help_text="HTTP method (http/https monitors only).",
+    )
+    path = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Probe path, e.g. / or /health (http/https monitors only).",
+    )
+    port = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Probe port; defaults to the protocol's port."
+    )
+    expected_codes = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Status codes considered healthy, e.g. 200 or 2xx.",
+    )
+    expected_body = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Substring the response body must contain to be considered healthy. A status "
+        "code alone does not prove the site rendered.",
+    )
+    header = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Probe request headers, e.g. {"Host": ["tolleytire.com"]}.',
+    )
+    probe_zone = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Zone the probe resolves the origin against (sends SNI + Host for this name).",
+    )
+    interval = models.PositiveIntegerField(
+        default=60, help_text="Seconds between probes."
+    )
+    timeout = models.PositiveIntegerField(default=5, help_text="Probe timeout, in seconds.")
+    retries = models.PositiveIntegerField(
+        default=2, help_text="Retries before an origin is marked unhealthy."
+    )
+    consecutive_up = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Successful probes before a recovered origin is returned to service.",
+    )
+    consecutive_down = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Failed probes before an origin is withdrawn."
+    )
+    follow_redirects = models.BooleanField(default=False)
+    allow_insecure = models.BooleanField(
+        default=False, help_text="Accept an invalid TLS certificate from the origin."
+    )
+    description = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Cloudflare Monitor"
+        constraints = [
+            models.UniqueConstraint(fields=["name"], name="netbox_cloudflare_monitor_name")
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflaremonitor", args=[self.pk])
+
+    def get_type_color(self):
+        return CloudflareMonitorTypeChoices.colors.get(self.type)
+
+    def clean(self):
+        super().clean()
+        if self.type in (
+            CloudflareMonitorTypeChoices.HTTP,
+            CloudflareMonitorTypeChoices.HTTPS,
+        ):
+            if not self.path:
+                raise ValidationError({"path": "Required for an http/https monitor."})
+            if not self.expected_codes:
+                raise ValidationError(
+                    {"expected_codes": "Required for an http/https monitor."}
+                )
+        if self.timeout >= self.interval:
+            raise ValidationError(
+                {"timeout": "Timeout must be shorter than the probe interval."}
+            )
+
+
+class CloudflareLBPool(NetBoxModel):
+    """An account-scoped load-balancer origin pool. A pool is healthy while at least
+    ``minimum_origins`` of its origins pass the ``monitor``; an unhealthy pool is skipped by every
+    load balancer that lists it."""
+
+    name = models.CharField(max_length=100, unique=True)
+    account = models.CharField(
+        max_length=100, help_text="Cloudflare account id/slug that owns this pool."
+    )
+    monitor = models.ForeignKey(
+        CloudflareMonitor,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="pools",
+        help_text="Health monitor probing this pool's origins. Without one, origins are never "
+        "health-checked and the pool can never fail over.",
+    )
+    enabled = models.BooleanField(default=True)
+    minimum_origins = models.PositiveIntegerField(
+        default=1, help_text="Healthy origins required for the pool itself to be healthy."
+    )
+    notification_email = models.CharField(
+        max_length=255, blank=True, help_text="Address notified when the pool's health changes."
+    )
+    description = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Cloudflare LB Pool"
+        constraints = [
+            models.UniqueConstraint(fields=["name"], name="netbox_cloudflare_lb_pool_name")
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflarelbpool", args=[self.pk])
+
+
+class CloudflareLBOrigin(NetBoxModel):
+    """One origin server inside a pool — the public address traffic is sent to when this pool
+    serves.
+
+    ``address`` is a public endpoint reachable from Cloudflare's edge, so an origin behind a
+    NAT/port-forward is modeled by its **public** address, not the internal one. ``header``
+    carries the Host header the edge sends, which is what lets one public IP fronting many client
+    hostnames route correctly."""
+
+    pool = models.ForeignKey(
+        CloudflareLBPool,
+        on_delete=models.CASCADE,
+        related_name="origins",
+        help_text="The pool this origin belongs to.",
+    )
+    name = models.CharField(max_length=100, help_text="Origin name within the pool.")
+    address = models.CharField(
+        max_length=255, help_text="Public IP or hostname Cloudflare's edge connects to."
+    )
+    enabled = models.BooleanField(default=True)
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        default=1,
+        help_text="Relative share of traffic within the pool (0–1).",
+    )
+    header = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Host header the edge sends, e.g. {"Host": ["tolleytire.com"]}.',
+    )
+
+    class Meta:
+        ordering = ["pool", "name"]
+        verbose_name = "Cloudflare LB Origin"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pool", "name"], name="netbox_cloudflare_lb_origin_pool_name"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pool}: {self.name} ({self.address})"
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflarelborigin", args=[self.pk])
+
+
+class CloudflareLoadBalancer(NetBoxModel):
+    """A zone-scoped load balancer: one hostname whose traffic is steered across pools.
+
+    With ``steering_policy = off`` (the default here) the ordered ``default_pools`` are tried in
+    order and the first healthy one serves — which is exactly DNS-tier failover: pool 1 is the
+    primary site, pool 2 the standby. ``fallback_pool`` serves only when every default pool is
+    unhealthy, so it is the last line before an outage, not part of the rotation.
+
+    This tier fails over independently of any load balancer running *at* an origin, which is why
+    it survives the loss of an origin site's edge router entirely."""
+
+    zone = models.ForeignKey(
+        "netbox_dns.Zone",
+        on_delete=models.PROTECT,
+        related_name="load_balancers",
+        help_text="The DNS zone (netbox_dns) the balanced hostname lives in.",
+    )
+    name = models.CharField(
+        max_length=255, help_text="The balanced FQDN, e.g. tolleytire.com or www.tolleytire.com."
+    )
+    default_pools = models.ManyToManyField(
+        CloudflareLBPool,
+        through="CloudflareLBDefaultPool",
+        related_name="load_balancers",
+        help_text="Ordered pools; with steering off, the first healthy one serves.",
+    )
+    fallback_pool = models.ForeignKey(
+        CloudflareLBPool,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="fallback_for",
+        help_text="Serves only when every default pool is unhealthy.",
+    )
+    steering_policy = models.CharField(
+        max_length=32,
+        choices=CloudflareLBSteeringChoices,
+        default=CloudflareLBSteeringChoices.OFF,
+    )
+    session_affinity = models.CharField(
+        max_length=16,
+        choices=CloudflareLBSessionAffinityChoices,
+        default=CloudflareLBSessionAffinityChoices.NONE,
+    )
+    proxied = models.BooleanField(
+        default=True,
+        help_text="Route through the Cloudflare edge. A load balancer only health-checks and "
+        "fails over when proxied; a DNS-only record is served as-is.",
+    )
+    enabled = models.BooleanField(default=True)
+    ttl = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="TTL in seconds. Only valid when not proxied (a proxied LB is always automatic).",
+    )
+    description = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["zone", "name"]
+        verbose_name = "Cloudflare Load Balancer"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone", "name"], name="netbox_cloudflare_lb_zone_name"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflareloadbalancer", args=[self.pk])
+
+    def get_steering_policy_color(self):
+        return CloudflareLBSteeringChoices.colors.get(self.steering_policy)
+
+    def clean(self):
+        super().clean()
+        if self.proxied and self.ttl:
+            raise ValidationError(
+                {"ttl": "A proxied load balancer's TTL is always automatic; leave it unset."}
+            )
+        if not self.proxied:
+            raise ValidationError(
+                {
+                    "proxied": "A DNS-only load balancer is never health-checked, so it cannot "
+                    "fail over. Proxy it or do not model it as a load balancer."
+                }
+            )
+
+
+class CloudflareLBDefaultPool(NetBoxModel):
+    """One position in a load balancer's ordered default-pool list.
+
+    The order **is** the failover priority under ``steering_policy = off``: order 1 is the
+    primary, order 2 the standby. Modeled as a through-row rather than a bare M2M because a
+    Django M2M has no stable ordering, and an unordered failover list is not a failover list."""
+
+    load_balancer = models.ForeignKey(
+        CloudflareLoadBalancer,
+        on_delete=models.CASCADE,
+        related_name="pool_assignments",
+    )
+    pool = models.ForeignKey(
+        CloudflareLBPool, on_delete=models.PROTECT, related_name="pool_assignments"
+    )
+    order = models.PositiveIntegerField(
+        default=100, help_text="Failover priority; lower is preferred."
+    )
+
+    class Meta:
+        ordering = ["load_balancer", "order"]
+        verbose_name = "Cloudflare LB Default Pool"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["load_balancer", "order"], name="netbox_cloudflare_lb_default_pool_order"
+            ),
+            models.UniqueConstraint(
+                fields=["load_balancer", "pool"], name="netbox_cloudflare_lb_default_pool_unique"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.load_balancer}[{self.order}]: {self.pool}"
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflarelbdefaultpool", args=[self.pk])

@@ -57,3 +57,69 @@ class CloudflareWAFActionChoices(ChoiceSet):
         (LOG, "Log", "blue"),
         (ALLOW, "Allow", "green"),
     ]
+
+
+class CloudflareMonitorTypeChoices(ChoiceSet):
+    """Probe protocol a load-balancer health monitor speaks."""
+
+    HTTP = "http"
+    HTTPS = "https"
+    TCP = "tcp"
+    UDP_ICMP = "udp_icmp"
+    ICMP_PING = "icmp_ping"
+    SMTP = "smtp"
+    CHOICES = [
+        (HTTPS, "HTTPS", "green"),
+        (HTTP, "HTTP", "blue"),
+        (TCP, "TCP", "cyan"),
+        (UDP_ICMP, "UDP-ICMP", "gray"),
+        (ICMP_PING, "ICMP ping", "gray"),
+        (SMTP, "SMTP", "orange"),
+    ]
+
+
+class CloudflareMonitorMethodChoices(ChoiceSet):
+    """HTTP method an http/https monitor probes with."""
+
+    GET = "GET"
+    HEAD = "HEAD"
+    POST = "POST"
+    CHOICES = [(GET, "GET", "blue"), (HEAD, "HEAD", "gray"), (POST, "POST", "orange")]
+
+
+class CloudflareLBSteeringChoices(ChoiceSet):
+    """How a load balancer selects among its default pools.
+
+    ``off`` is the failover policy: pools are tried in their configured order and the first
+    healthy one serves. Everything else distributes traffic, which is not what an
+    active-passive origin pair wants."""
+
+    OFF = "off"
+    GEO = "geo"
+    RANDOM = "random"
+    DYNAMIC_LATENCY = "dynamic_latency"
+    PROXIMITY = "proximity"
+    LEAST_OUTSTANDING_REQUESTS = "least_outstanding_requests"
+    CHOICES = [
+        (OFF, "Off (ordered failover)", "green"),
+        (GEO, "Geo", "blue"),
+        (RANDOM, "Random", "gray"),
+        (DYNAMIC_LATENCY, "Dynamic latency", "cyan"),
+        (PROXIMITY, "Proximity", "indigo"),
+        (LEAST_OUTSTANDING_REQUESTS, "Least outstanding requests", "purple"),
+    ]
+
+
+class CloudflareLBSessionAffinityChoices(ChoiceSet):
+    """Session affinity (stickiness) mode."""
+
+    NONE = "none"
+    COOKIE = "cookie"
+    IP_COOKIE = "ip_cookie"
+    HEADER = "header"
+    CHOICES = [
+        (NONE, "None", "gray"),
+        (COOKIE, "Cookie", "blue"),
+        (IP_COOKIE, "IP + cookie", "cyan"),
+        (HEADER, "Header", "purple"),
+    ]

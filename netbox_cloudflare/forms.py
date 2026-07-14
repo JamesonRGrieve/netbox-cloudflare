@@ -11,12 +11,19 @@ from utilities.forms.fields import (
 from utilities.forms.rendering import FieldSet
 
 from .choices import (
+    CloudflareLBSteeringChoices,
+    CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
 )
 from .models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
@@ -139,3 +146,139 @@ class CloudflareWAFRuleFilterForm(NetBoxModelFilterSetForm):
     action = forms.MultipleChoiceField(choices=CloudflareWAFActionChoices, required=False)
     enabled = forms.NullBooleanField(required=False)
     tag = TagFilterField(CloudflareWAFRule)
+
+
+class CloudflareMonitorForm(NetBoxModelForm):
+    fieldsets = (
+        FieldSet("name", "account", "type", "description", name="Monitor"),
+        FieldSet(
+            "method", "path", "port", "expected_codes", "expected_body", "header", "probe_zone",
+            name="Probe",
+        ),
+        FieldSet(
+            "interval", "timeout", "retries", "consecutive_up", "consecutive_down",
+            name="Timing",
+        ),
+        FieldSet("follow_redirects", "allow_insecure", name="TLS / redirects"),
+    )
+
+    class Meta:
+        model = CloudflareMonitor
+        fields = [
+            "name", "account", "type", "method", "path", "port", "expected_codes",
+            "expected_body", "header", "probe_zone", "interval", "timeout", "retries",
+            "consecutive_up", "consecutive_down", "follow_redirects", "allow_insecure",
+            "description", "tags",
+        ]
+
+
+class CloudflareMonitorFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareMonitor
+    account = forms.CharField(required=False)
+    type = forms.MultipleChoiceField(choices=CloudflareMonitorTypeChoices, required=False)
+    tag = TagFilterField(CloudflareMonitor)
+
+
+class CloudflareLBPoolForm(NetBoxModelForm):
+    monitor = DynamicModelChoiceField(queryset=CloudflareMonitor.objects.all(), required=False)
+
+    fieldsets = (
+        FieldSet("name", "account", "description", name="Pool"),
+        FieldSet("monitor", "enabled", "minimum_origins", "notification_email", name="Health"),
+    )
+
+    class Meta:
+        model = CloudflareLBPool
+        fields = [
+            "name", "account", "monitor", "enabled", "minimum_origins",
+            "notification_email", "description", "tags",
+        ]
+
+
+class CloudflareLBPoolFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareLBPool
+    monitor_id = DynamicModelMultipleChoiceField(
+        queryset=CloudflareMonitor.objects.all(), required=False, label="Monitor"
+    )
+    account = forms.CharField(required=False)
+    enabled = forms.NullBooleanField(required=False)
+    tag = TagFilterField(CloudflareLBPool)
+
+
+class CloudflareLBOriginForm(NetBoxModelForm):
+    pool = DynamicModelChoiceField(queryset=CloudflareLBPool.objects.all())
+
+    fieldsets = (
+        FieldSet("pool", "name", "address", name="Origin"),
+        FieldSet("enabled", "weight", "header", name="Behaviour"),
+    )
+
+    class Meta:
+        model = CloudflareLBOrigin
+        fields = ["pool", "name", "address", "enabled", "weight", "header", "tags"]
+
+
+class CloudflareLBOriginFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareLBOrigin
+    pool_id = DynamicModelMultipleChoiceField(
+        queryset=CloudflareLBPool.objects.all(), required=False, label="Pool"
+    )
+    enabled = forms.NullBooleanField(required=False)
+    tag = TagFilterField(CloudflareLBOrigin)
+
+
+class CloudflareLoadBalancerForm(NetBoxModelForm):
+    zone = DynamicModelChoiceField(queryset=Zone.objects.all())
+    fallback_pool = DynamicModelChoiceField(
+        queryset=CloudflareLBPool.objects.all(), required=False
+    )
+
+    fieldsets = (
+        FieldSet("zone", "name", "description", name="Load balancer"),
+        FieldSet("steering_policy", "session_affinity", "fallback_pool", name="Steering"),
+        FieldSet("proxied", "enabled", "ttl", name="Edge"),
+    )
+
+    class Meta:
+        model = CloudflareLoadBalancer
+        fields = [
+            "zone", "name", "fallback_pool", "steering_policy", "session_affinity",
+            "proxied", "enabled", "ttl", "description", "tags",
+        ]
+
+
+class CloudflareLoadBalancerFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareLoadBalancer
+    zone_id = DynamicModelMultipleChoiceField(
+        queryset=Zone.objects.all(), required=False, label="Zone"
+    )
+    pool_id = DynamicModelMultipleChoiceField(
+        queryset=CloudflareLBPool.objects.all(), required=False, label="Default pool"
+    )
+    steering_policy = forms.MultipleChoiceField(
+        choices=CloudflareLBSteeringChoices, required=False
+    )
+    enabled = forms.NullBooleanField(required=False)
+    tag = TagFilterField(CloudflareLoadBalancer)
+
+
+class CloudflareLBDefaultPoolForm(NetBoxModelForm):
+    load_balancer = DynamicModelChoiceField(queryset=CloudflareLoadBalancer.objects.all())
+    pool = DynamicModelChoiceField(queryset=CloudflareLBPool.objects.all())
+
+    fieldsets = (FieldSet("load_balancer", "pool", "order", name="Failover priority"),)
+
+    class Meta:
+        model = CloudflareLBDefaultPool
+        fields = ["load_balancer", "pool", "order", "tags"]
+
+
+class CloudflareLBDefaultPoolFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareLBDefaultPool
+    load_balancer_id = DynamicModelMultipleChoiceField(
+        queryset=CloudflareLoadBalancer.objects.all(), required=False, label="Load balancer"
+    )
+    pool_id = DynamicModelMultipleChoiceField(
+        queryset=CloudflareLBPool.objects.all(), required=False, label="Pool"
+    )
+    tag = TagFilterField(CloudflareLBDefaultPool)

@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """FilterSet tests against a real DB (no mocks): explicit FK `_id` scoping + choice/bool filters
-across the four models. Real netbox_dns Zone + netbox_pf Alias instances back the FKs."""
+across every model. Real netbox_dns Zone + netbox_pf Alias instances back the FKs.
+
+The load-balancer `pool_id` filter is the one worth pinning: default pools are reached through
+the ordered through-model, not a direct FK, so the test asserts a fallback-only pool does NOT
+match it."""
 
 from django.test import TestCase
 
@@ -11,18 +15,28 @@ from netbox_cloudflare.choices import (
 )
 from netbox_cloudflare.filtersets import (
     CloudflareIngressFilterSet,
+    CloudflareLBDefaultPoolFilterSet,
+    CloudflareLBOriginFilterSet,
+    CloudflareLBPoolFilterSet,
+    CloudflareLoadBalancerFilterSet,
+    CloudflareMonitorFilterSet,
     CloudflareRecordFilterSet,
     CloudflareTunnelFilterSet,
     CloudflareWAFRuleFilterSet,
 )
 from netbox_cloudflare.models import (
     CloudflareIngress,
+    CloudflareLBDefaultPool,
+    CloudflareLBOrigin,
+    CloudflareLBPool,
+    CloudflareLoadBalancer,
+    CloudflareMonitor,
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
 )
 
-from .factories import make_alias, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_zone
 
 
 class CloudflareTunnelFilterSetTest(TestCase):
@@ -143,4 +157,106 @@ class CloudflareWAFRuleFilterSetTest(TestCase):
     def test_ip_alias_id(self):
         self.assertEqual(
             CloudflareWAFRuleFilterSet({"ip_alias_id": [self.alias.pk]}, self.queryset).qs.count(), 1
+        )
+
+
+class CloudflareLoadBalancingFilterSetTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.zone = make_zone("tolleytire.com")
+        cls.other_zone = make_zone("parkerplumbing.ca")
+        cls.https = make_monitor("wp-https-f")
+        cls.tcp = make_monitor("mail-tcp-f", type="tcp", path="", expected_codes="")
+
+        cls.omg = make_pool("omg-origin-f", monitor=cls.https)
+        cls.house = make_pool("house-origin-f", monitor=cls.https)
+        cls.orphan = make_pool("orphan-f", enabled=False)
+
+        CloudflareLBOrigin.objects.create(pool=cls.omg, name="omg-wan", address="203.0.113.100")
+        CloudflareLBOrigin.objects.create(pool=cls.house, name="house-wan", address="198.18.0.100")
+
+        cls.lb = CloudflareLoadBalancer.objects.create(zone=cls.zone, name="tolleytire.com")
+        cls.other_lb = CloudflareLoadBalancer.objects.create(
+            zone=cls.other_zone, name="parkerplumbing.ca", fallback_pool=cls.orphan
+        )
+        CloudflareLBDefaultPool.objects.create(load_balancer=cls.lb, pool=cls.omg, order=1)
+        CloudflareLBDefaultPool.objects.create(load_balancer=cls.lb, pool=cls.house, order=2)
+
+    def test_monitor_type(self):
+        self.assertEqual(
+            CloudflareMonitorFilterSet(
+                {"type": ["tcp"]}, CloudflareMonitor.objects.all()
+            ).qs.count(),
+            1,
+        )
+
+    def test_pool_by_monitor(self):
+        self.assertEqual(
+            CloudflareLBPoolFilterSet(
+                {"monitor_id": [self.https.pk]}, CloudflareLBPool.objects.all()
+            ).qs.count(),
+            2,
+        )
+
+    def test_pool_enabled(self):
+        self.assertEqual(
+            CloudflareLBPoolFilterSet(
+                {"enabled": False}, CloudflareLBPool.objects.all()
+            ).qs.count(),
+            1,
+        )
+
+    def test_origin_by_pool(self):
+        self.assertEqual(
+            CloudflareLBOriginFilterSet(
+                {"pool_id": [self.omg.pk]}, CloudflareLBOrigin.objects.all()
+            ).qs.count(),
+            1,
+        )
+
+    def test_lb_by_zone(self):
+        self.assertEqual(
+            CloudflareLoadBalancerFilterSet(
+                {"zone_id": [self.zone.pk]}, CloudflareLoadBalancer.objects.all()
+            ).qs.count(),
+            1,
+        )
+
+    def test_lb_by_default_pool_traverses_the_through_model(self):
+        self.assertEqual(
+            CloudflareLoadBalancerFilterSet(
+                {"pool_id": [self.house.pk]}, CloudflareLoadBalancer.objects.all()
+            ).qs.count(),
+            1,
+        )
+        # The fallback pool is NOT a default pool, so it must not match.
+        self.assertEqual(
+            CloudflareLoadBalancerFilterSet(
+                {"pool_id": [self.orphan.pk]}, CloudflareLoadBalancer.objects.all()
+            ).qs.count(),
+            0,
+        )
+
+    def test_lb_by_fallback_pool(self):
+        self.assertEqual(
+            CloudflareLoadBalancerFilterSet(
+                {"fallback_pool_id": [self.orphan.pk]}, CloudflareLoadBalancer.objects.all()
+            ).qs.count(),
+            1,
+        )
+
+    def test_default_pool_by_lb(self):
+        self.assertEqual(
+            CloudflareLBDefaultPoolFilterSet(
+                {"load_balancer_id": [self.lb.pk]}, CloudflareLBDefaultPool.objects.all()
+            ).qs.count(),
+            2,
+        )
+
+    def test_search_lb_by_zone_name(self):
+        self.assertEqual(
+            CloudflareLoadBalancerFilterSet(
+                {"q": "parkerplumbing"}, CloudflareLoadBalancer.objects.all()
+            ).qs.count(),
+            1,
         )

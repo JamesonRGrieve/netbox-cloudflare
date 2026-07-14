@@ -76,6 +76,37 @@ referenced by `$<alias name>` in the rule expression.
 
 `UniqueConstraint(zone, order)`.
 
+### Load Balancing — `CloudflareMonitor` / `CloudflareLBPool` / `CloudflareLBOrigin` / `CloudflareLoadBalancer` / `CloudflareLBDefaultPool`
+
+DNS-tier failover. Unlike a load balancer running *at* an origin, this survives the total loss of
+an origin site — its edge router, its power, its ISP — because the decision is made at
+Cloudflare's edge.
+
+**`CloudflareMonitor`** is the probe, and the sensor everything else depends on: an origin is only
+withdrawn when this fails it, so `interval` / `timeout` / `retries` set how long a dead site keeps
+being served. It must hit the real user-visible surface (the client's hostname over HTTPS, via
+`probe_zone` + a Host `header`) — a probe against a loopback or a bare IP reports healthy while the
+site is down. `clean()` requires `path` + `expected_codes` on an http/https monitor and a `timeout`
+shorter than the `interval`.
+
+**`CloudflareLBPool`** is an account-scoped origin pool, healthy while at least `minimum_origins`
+of its origins pass its `monitor`. **`CloudflareLBOrigin`** is one member, addressed by its
+**public** endpoint (what Cloudflare's edge can reach — so an origin behind a NAT/port-forward is
+modeled by its public address, not its internal one); its `header` carries the Host header the edge
+sends, which is what lets one public IP front many client hostnames.
+
+**`CloudflareLoadBalancer`** is a zone-scoped balanced hostname. With `steering_policy = off` (the
+default) the ordered default pools are tried in order and the first healthy one serves — order 1 is
+the primary site, order 2 the standby. `fallback_pool` serves only when *every* default pool is
+unhealthy, so it is the last line before an outage, not part of the rotation. `clean()` rejects a
+DNS-only load balancer outright: an unproxied record is never health-checked, so it cannot fail
+over.
+
+**`CloudflareLBDefaultPool`** is one position in that ordered list. It is a through-model rather
+than a bare M2M because a Django M2M has no stable ordering, and an unordered failover list is not
+a failover list. `UniqueConstraint(load_balancer, order)` and `UniqueConstraint(load_balancer,
+pool)`.
+
 ## Depends on
 
 `netbox_dns` (PyPI `netbox-plugin-dns`) and `netbox_pf` must both be installed and enabled — they
