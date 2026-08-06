@@ -107,11 +107,11 @@ class CloudflareRecordFilterForm(NetBoxModelFilterSetForm):
 
 
 class CloudflareWAFRuleForm(NetBoxModelForm):
-    zone = DynamicModelChoiceField(queryset=Zone.objects.all())
+    zones = DynamicModelMultipleChoiceField(queryset=Zone.objects.all(), required=False)
     ip_alias = DynamicModelChoiceField(queryset=Alias.objects.all(), required=False)
 
     fieldsets = (
-        FieldSet("zone", "phase", "order", "enabled", name="Rule"),
+        FieldSet("zones", "phase", "order", "enabled", name="Rule"),
         FieldSet("description", "expression", "action", name="Match"),
         FieldSet("ratelimit_threshold", "ratelimit_period", name="Rate limit"),
         FieldSet("ip_alias", name="IP list"),
@@ -120,7 +120,7 @@ class CloudflareWAFRuleForm(NetBoxModelForm):
     class Meta:
         model = CloudflareWAFRule
         fields = [
-            "zone",
+            "zones",
             "phase",
             "description",
             "expression",

@@ -14,6 +14,7 @@ from ..models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareWAFRuleZone,
 )
 
 
@@ -96,11 +97,20 @@ class CloudflareRecordSerializer(NetBoxModelSerializer):
         brief_fields = ["id", "url", "display", "zone", "name", "type"]
 
 
+class CloudflareWAFRuleZoneSerializer(NetBoxModelSerializer):
+    zone = ZoneSerializer(nested=True)
+
+    class Meta:
+        model = CloudflareWAFRuleZone
+        fields = ["id", "zone", "enabled"]
+
+
 class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="plugins-api:netbox_cloudflare-api:cloudflarewafrule-detail"
     )
-    zone = ZoneSerializer(nested=True)
+    zones = ZoneSerializer(nested=True, many=True, read_only=True)
+    zone_assignments = CloudflareWAFRuleZoneSerializer(many=True, read_only=True)
     ip_alias = AliasSerializer(nested=True, required=False, allow_null=True)
 
     class Meta:
@@ -109,7 +119,8 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
             "id",
             "url",
             "display",
-            "zone",
+            "zones",
+            "zone_assignments",
             "phase",
             "description",
             "expression",
@@ -124,7 +135,7 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
             "created",
             "last_updated",
         ]
-        brief_fields = ["id", "url", "display", "zone", "phase", "action", "order"]
+        brief_fields = ["id", "url", "display", "description", "phase", "action", "order"]
 
 
 class CloudflareMonitorSerializer(NetBoxModelSerializer):

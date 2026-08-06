@@ -193,15 +193,18 @@ class CloudflareRecord(NetBoxModel):
 
 
 class CloudflareWAFRule(NetBoxModel):
-    """A per-zone Cloudflare WAF / rate-limit rule: an expression + action deployed into a
-    ruleset ``phase``, optionally matching an IP list held in a ``netbox_pf`` ``Alias`` (the same
-    named-list primitive the firewall uses) and synced to Cloudflare as an account IP list."""
+    """A Cloudflare WAF / rate-limit rule applied to one or many zones: an expression + action
+    deployed into a ruleset ``phase``, optionally matching an IP list held in a ``netbox_pf``
+    ``Alias``. One canonical rule definition can be shared across every zone in an account (or
+    across accounts); per-zone enable/disable is handled via the ``CloudflareWAFRuleZone``
+    through-table."""
 
-    zone = models.ForeignKey(
+    zones = models.ManyToManyField(
         "netbox_dns.Zone",
-        on_delete=models.CASCADE,
+        through="CloudflareWAFRuleZone",
         related_name="waf_rules",
-        help_text="The zone (netbox_dns) this rule applies to.",
+        blank=True,
+        help_text="Zones (netbox_dns) this rule applies to.",
     )
     phase = models.CharField(
         max_length=40,
@@ -214,7 +217,10 @@ class CloudflareWAFRule(NetBoxModel):
     order = models.PositiveIntegerField(
         default=100, help_text="Evaluation order within the zone's ruleset; lower first."
     )
-    enabled = models.BooleanField(default=True)
+    enabled = models.BooleanField(
+        default=True,
+        help_text="Default enabled state; overridden per-zone via the zone assignment.",
+    )
     ratelimit_threshold = models.PositiveIntegerField(
         null=True, blank=True, help_text="Requests before the rate-limit action fires."
     )
@@ -232,16 +238,12 @@ class CloudflareWAFRule(NetBoxModel):
     )
 
     class Meta:
-        ordering = ["zone", "order"]
+        ordering = ["order"]
         verbose_name = "Cloudflare WAF Rule"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["zone", "order"], name="netbox_cloudflare_waf_rule_zone_order"
-            )
-        ]
 
     def __str__(self):
-        return f"{self.zone} [{self.phase}] {self.action} (order {self.order})"
+        zone_count = self.zones.count()
+        return f"{self.description or self.action} [{self.phase}] ({zone_count} zones)"
 
     def get_absolute_url(self):
         return reverse("plugins:netbox_cloudflare:cloudflarewafrule", args=[self.pk])
@@ -251,6 +253,53 @@ class CloudflareWAFRule(NetBoxModel):
 
     def get_action_color(self):
         return CloudflareWAFActionChoices.colors.get(self.action)
+
+
+class CloudflareWAFRuleZone(NetBoxModel):
+    """Through-table linking a WAF rule to a zone, with a per-zone enabled override.
+
+    ``enabled`` defaults to ``None`` (inherit from the rule); ``True``/``False`` overrides the
+    rule's default for this specific zone (e.g. obsessedmediagroup.ca carries the Bot Fight
+    rule but with enabled=false)."""
+
+    rule = models.ForeignKey(
+        CloudflareWAFRule,
+        on_delete=models.CASCADE,
+        related_name="zone_assignments",
+    )
+    zone = models.ForeignKey(
+        "netbox_dns.Zone",
+        on_delete=models.CASCADE,
+        related_name="waf_rule_assignments",
+    )
+    enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Override the rule's default enabled state for this zone. "
+        "Null = inherit from the rule.",
+    )
+
+    class Meta:
+        ordering = ["rule", "zone"]
+        verbose_name = "WAF Rule Zone Assignment"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rule", "zone"],
+                name="netbox_cloudflare_waf_rule_zone_unique",
+            )
+        ]
+
+    def __str__(self):
+        state = "inherit" if self.enabled is None else ("enabled" if self.enabled else "disabled")
+        return f"{self.rule.description} @ {self.zone} ({state})"
+
+    def get_absolute_url(self):
+        return self.rule.get_absolute_url()
+
+    @property
+    def effective_enabled(self):
+        return self.rule.enabled if self.enabled is None else self.enabled
 
 
 class CloudflareMonitor(NetBoxModel):

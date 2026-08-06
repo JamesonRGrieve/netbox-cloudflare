@@ -97,7 +97,7 @@ class CloudflareRecordTable(NetBoxTable):
 
 
 class CloudflareWAFRuleTable(NetBoxTable):
-    zone = tables.Column(linkify=True)
+    zone_count = tables.Column(accessor="zones__count", verbose_name="Zones", orderable=False)
     phase = columns.ChoiceFieldColumn()
     action = columns.ChoiceFieldColumn()
     enabled = columns.BooleanColumn()
@@ -108,7 +108,7 @@ class CloudflareWAFRuleTable(NetBoxTable):
         fields = (
             "pk",
             "id",
-            "zone",
+            "zone_count",
             "phase",
             "description",
             "expression",

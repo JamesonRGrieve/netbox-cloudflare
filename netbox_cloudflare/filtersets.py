@@ -78,7 +78,7 @@ class CloudflareRecordFilterSet(NetBoxModelFilterSet):
 
 class CloudflareWAFRuleFilterSet(NetBoxModelFilterSet):
     zone_id = django_filters.ModelMultipleChoiceFilter(
-        field_name="zone", queryset=Zone.objects.all(), label="Zone (ID)"
+        field_name="zones", queryset=Zone.objects.all(), label="Zone (ID)"
     )
     ip_alias_id = django_filters.ModelMultipleChoiceFilter(
         field_name="ip_alias", queryset=Alias.objects.all(), label="IP alias (ID)"
@@ -94,8 +94,8 @@ class CloudflareWAFRuleFilterSet(NetBoxModelFilterSet):
         return queryset.filter(
             Q(description__icontains=value)
             | Q(expression__icontains=value)
-            | Q(zone__name__icontains=value)
-        )
+            | Q(zones__name__icontains=value)
+        ).distinct()
 
 
 class CloudflareMonitorFilterSet(NetBoxModelFilterSet):
