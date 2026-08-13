@@ -119,10 +119,6 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
     zone_assignments = CloudflareWAFRuleZoneSerializer(many=True, read_only=True)
     ip_alias = AliasSerializer(nested=True, required=False, allow_null=True)
 
-    def to_internal_value(self, data):
-        self._zone_assignments_input = data.pop("zone_assignments", None)
-        return super().to_internal_value(data)
-
     def _sync_zone_assignments(self, instance, za_data):
         incoming = {item["zone"].pk if hasattr(item["zone"], "pk") else item["zone"]: item.get("enabled") for item in za_data}
         existing = {za.zone_id: za for za in instance.zone_assignments.all()}
@@ -138,16 +134,18 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
 
     def create(self, validated_data):
         instance = super().create(validated_data)
-        if self._zone_assignments_input is not None:
-            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=self._zone_assignments_input, many=True)
+        za_input = self.initial_data.get("zone_assignments")
+        if za_input is not None:
+            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=za_input, many=True)
             write_ser.is_valid(raise_exception=True)
             self._sync_zone_assignments(instance, write_ser.validated_data)
         return instance
 
     def update(self, instance, validated_data):
         instance = super().update(instance, validated_data)
-        if self._zone_assignments_input is not None:
-            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=self._zone_assignments_input, many=True)
+        za_input = self.initial_data.get("zone_assignments")
+        if za_input is not None:
+            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=za_input, many=True)
             write_ser.is_valid(raise_exception=True)
             self._sync_zone_assignments(instance, write_ser.validated_data)
         return instance
