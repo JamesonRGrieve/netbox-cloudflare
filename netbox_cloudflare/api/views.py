@@ -49,6 +49,35 @@ class CloudflareWAFRuleViewSet(NetBoxModelViewSet):
     serializer_class = CloudflareWAFRuleSerializer
     filterset_class = filtersets.CloudflareWAFRuleFilterSet
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        za_input = self.request.data.get("zone_assignments")
+        if za_input is not None:
+            from ..models import CloudflareWAFRuleZone
+            incoming = {}
+            for item in za_input:
+                zone_id = item["zone"] if isinstance(item["zone"], int) else item["zone"]["id"]
+                incoming[zone_id] = item.get("enabled")
+            existing = {za.zone_id: za for za in instance.zone_assignments.all()}
+            for zone_id in set(existing) - set(incoming):
+                existing[zone_id].delete()
+            for zone_id, enabled in incoming.items():
+                if zone_id in existing:
+                    if existing[zone_id].enabled != enabled:
+                        existing[zone_id].enabled = enabled
+                        existing[zone_id].save()
+                else:
+                    CloudflareWAFRuleZone.objects.create(rule=instance, zone_id=zone_id, enabled=enabled)
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        za_input = self.request.data.get("zone_assignments")
+        if za_input is not None:
+            from ..models import CloudflareWAFRuleZone
+            for item in za_input:
+                zone_id = item["zone"] if isinstance(item["zone"], int) else item["zone"]["id"]
+                CloudflareWAFRuleZone.objects.create(rule=instance, zone_id=zone_id, enabled=item.get("enabled"))
+
 
 class CloudflareMonitorViewSet(NetBoxModelViewSet):
     queryset = CloudflareMonitor.objects.prefetch_related("tags")

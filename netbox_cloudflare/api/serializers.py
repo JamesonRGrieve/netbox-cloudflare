@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from netbox.api.serializers import NetBoxModelSerializer
 from netbox_dns.api.serializers import ZoneSerializer
-from netbox_dns.models import Zone
 from netbox_pf.api.serializers import AliasSerializer
 from rest_framework import serializers
 
@@ -106,11 +105,6 @@ class CloudflareWAFRuleZoneSerializer(NetBoxModelSerializer):
         fields = ["id", "zone", "enabled"]
 
 
-class CloudflareWAFRuleZoneWriteSerializer(serializers.Serializer):
-    zone = serializers.PrimaryKeyRelatedField(queryset=Zone.objects.all())
-    enabled = serializers.NullBooleanField(required=False, default=None)
-
-
 class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
     url = serializers.HyperlinkedIdentityField(
         view_name="plugins-api:netbox_cloudflare-api:cloudflarewafrule-detail"
@@ -118,37 +112,6 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
     zones = ZoneSerializer(nested=True, many=True, read_only=True)
     zone_assignments = CloudflareWAFRuleZoneSerializer(many=True, read_only=True)
     ip_alias = AliasSerializer(nested=True, required=False, allow_null=True)
-
-    def _sync_zone_assignments(self, instance, za_data):
-        incoming = {item["zone"].pk if hasattr(item["zone"], "pk") else item["zone"]: item.get("enabled") for item in za_data}
-        existing = {za.zone_id: za for za in instance.zone_assignments.all()}
-        for zone_id in set(existing) - set(incoming):
-            existing[zone_id].delete()
-        for zone_id, enabled in incoming.items():
-            if zone_id in existing:
-                if existing[zone_id].enabled != enabled:
-                    existing[zone_id].enabled = enabled
-                    existing[zone_id].save()
-            else:
-                CloudflareWAFRuleZone.objects.create(rule=instance, zone_id=zone_id, enabled=enabled)
-
-    def create(self, validated_data):
-        instance = super().create(validated_data)
-        za_input = self.initial_data.get("zone_assignments")
-        if za_input is not None:
-            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=za_input, many=True)
-            write_ser.is_valid(raise_exception=True)
-            self._sync_zone_assignments(instance, write_ser.validated_data)
-        return instance
-
-    def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data)
-        za_input = self.initial_data.get("zone_assignments")
-        if za_input is not None:
-            write_ser = CloudflareWAFRuleZoneWriteSerializer(data=za_input, many=True)
-            write_ser.is_valid(raise_exception=True)
-            self._sync_zone_assignments(instance, write_ser.validated_data)
-        return instance
 
     class Meta:
         model = CloudflareWAFRule
