@@ -543,7 +543,10 @@ class CloudflareLoadBalancer(NetBoxModel):
     session_affinity = models.CharField(
         max_length=16,
         choices=CloudflareLBSessionAffinityChoices,
-        default=CloudflareLBSessionAffinityChoices.NONE,
+        default=CloudflareLBSessionAffinityChoices.COOKIE,
+        help_text="Stickiness mode. Cookie is the fleet default: it pins each client to one "
+        "edge origin so per-origin session stores (each edge's own Redis) don't drop "
+        "WooCommerce/login sessions when the LB fails over or flaps between origins.",
     )
     proxied = models.BooleanField(
         default=True,
