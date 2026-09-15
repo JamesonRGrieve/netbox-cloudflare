@@ -74,6 +74,7 @@ class CloudflareRecordForm(NetBoxModelForm):
         FieldSet("content", "tunnel", name="Static / Tunnel target"),
         FieldSet("ddns_enabled", "ddns_source", name="DDNS"),
         FieldSet("proxied", "ttl", name="Edge"),
+        FieldSet("unmanaged", name="Management"),
     )
 
     class Meta:
@@ -88,6 +89,7 @@ class CloudflareRecordForm(NetBoxModelForm):
             "ddns_enabled",
             "ddns_source",
             "tunnel",
+            "unmanaged",
             "tags",
         ]
 
@@ -103,6 +105,7 @@ class CloudflareRecordFilterForm(NetBoxModelFilterSetForm):
     type = forms.MultipleChoiceField(choices=CloudflareRecordTypeChoices, required=False)
     proxied = forms.NullBooleanField(required=False)
     ddns_enabled = forms.NullBooleanField(required=False)
+    unmanaged = forms.NullBooleanField(required=False)
     tag = TagFilterField(CloudflareRecord)
 
 

@@ -65,6 +65,7 @@ class CloudflareRecordTable(NetBoxTable):
     tunnel = tables.Column(linkify=True)
     proxied = columns.BooleanColumn()
     ddns_enabled = columns.BooleanColumn()
+    unmanaged = columns.BooleanColumn()
     tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarerecord_list")
 
     class Meta(NetBoxTable.Meta):
@@ -81,6 +82,7 @@ class CloudflareRecordTable(NetBoxTable):
             "ddns_enabled",
             "ddns_source",
             "tunnel",
+            "unmanaged",
             "tags",
             "created",
             "last_updated",
@@ -92,6 +94,7 @@ class CloudflareRecordTable(NetBoxTable):
             "content",
             "proxied",
             "ddns_enabled",
+            "unmanaged",
             "tunnel",
         )
 

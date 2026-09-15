@@ -89,6 +89,7 @@ class CloudflareRecordSerializer(NetBoxModelSerializer):
             "ddns_enabled",
             "ddns_source",
             "tunnel",
+            "unmanaged",
             "tags",
             "custom_fields",
             "created",

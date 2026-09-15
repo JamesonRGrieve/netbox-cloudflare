@@ -154,6 +154,13 @@ class CloudflareRecord(NetBoxModel):
         related_name="records",
         help_text="When set, this record is a CNAME to <tunnel_id>.cfargotunnel.com.",
     )
+    unmanaged = models.BooleanField(
+        default=False,
+        help_text="Documented in NetBox but NOT pushed to Cloudflare by the tofu apply — its "
+        "value is owned by an external manager (e.g. Stalwart's automatic DNS management). "
+        "Cedes this record to that manager (so the two never fight) while keeping NetBox the "
+        "complete source of truth. An unmanaged record needs no content/tunnel/DDNS driver.",
+    )
 
     class Meta:
         ordering = ["zone", "name", "type"]
@@ -176,18 +183,21 @@ class CloudflareRecord(NetBoxModel):
 
     def clean(self):
         super().clean()
-        # Exactly one of static content / tunnel / ddns drives the record target.
-        drivers = [
-            ("content", bool(self.content)),
-            ("tunnel", self.tunnel_id is not None),
-            ("ddns", self.ddns_enabled),
-        ]
-        active = [name for name, on in drivers if on]
-        if len(active) != 1:
-            raise ValidationError(
-                "Exactly one target driver must be set: static content, a tunnel, or DDNS "
-                f"(got: {', '.join(active) or 'none'})."
-            )
+        # An unmanaged record documents an externally-owned value (e.g. Stalwart's automatic
+        # DNS); the tofu apply skips it, so the one-driver rule does not apply.
+        if not self.unmanaged:
+            # Exactly one of static content / tunnel / ddns drives the record target.
+            drivers = [
+                ("content", bool(self.content)),
+                ("tunnel", self.tunnel_id is not None),
+                ("ddns", self.ddns_enabled),
+            ]
+            active = [name for name, on in drivers if on]
+            if len(active) != 1:
+                raise ValidationError(
+                    "Exactly one target driver must be set: static content, a tunnel, or DDNS "
+                    f"(got: {', '.join(active) or 'none'})."
+                )
         if self.ddns_enabled and not self.ddns_source:
             raise ValidationError({"ddns_source": "A DDNS source is required when DDNS is enabled."})
 

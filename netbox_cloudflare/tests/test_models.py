@@ -138,6 +138,25 @@ class CloudflareRecordModelTest(TestCase):
         with self.assertRaises(ValidationError):
             r.clean()
 
+    def test_clean_unmanaged_no_driver_ok(self):
+        # An unmanaged record documents an externally-owned value (Stalwart automatic DNS);
+        # the tofu apply skips it, so the one-driver rule does not apply and no driver is fine.
+        r = CloudflareRecord(
+            zone=self.zone, name="_acme-challenge", type=CloudflareRecordTypeChoices.TXT,
+            unmanaged=True,
+        )
+        r.clean()  # no exception
+        r.full_clean()  # field-level validation also passes with a blank content
+
+    def test_clean_unmanaged_still_requires_ddns_source(self):
+        # Unmanaged waives the driver rule but not the ddns_source coupling.
+        r = CloudflareRecord(
+            zone=self.zone, name="dyn", type=CloudflareRecordTypeChoices.A,
+            unmanaged=True, ddns_enabled=True,
+        )
+        with self.assertRaises(ValidationError):
+            r.clean()
+
     def test_clean_ddns_requires_source(self):
         r = CloudflareRecord(
             zone=self.zone, name="f", type=CloudflareRecordTypeChoices.A, ddns_enabled=True
