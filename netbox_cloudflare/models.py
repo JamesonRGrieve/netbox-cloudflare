@@ -264,6 +264,21 @@ class CloudflareWAFRule(NetBoxModel):
     def get_action_color(self):
         return CloudflareWAFActionChoices.colors.get(self.action)
 
+    def set_zone_assignments(self, desired):
+        """Reconcile this rule's zone assignments to ``desired`` ({Zone: enabled-or-None}).
+        Existing rows are kept (stable ids + changelog), changed ``enabled`` values updated,
+        missing zones added and unlisted ones removed."""
+        existing = {za.zone_id: za for za in self.zone_assignments.all()}
+        wanted = {zone.pk: (zone, enabled) for zone, enabled in desired.items()}
+        for zone_id in existing.keys() - wanted.keys():
+            existing[zone_id].delete()
+        for zone_id, (zone, enabled) in wanted.items():
+            if zone_id not in existing:
+                CloudflareWAFRuleZone.objects.create(rule=self, zone=zone, enabled=enabled)
+            elif existing[zone_id].enabled != enabled:
+                existing[zone_id].enabled = enabled
+                existing[zone_id].save()
+
 
 class CloudflareWAFRuleZone(NetBoxModel):
     """Through-table linking a WAF rule to a zone, with a per-zone enabled override.

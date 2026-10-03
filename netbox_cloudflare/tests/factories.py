@@ -24,6 +24,17 @@ def make_alias(name="exempt", content="198.51.100.0/24"):
     return Alias.objects.create(name=name, type=AliasTypeChoices.NETWORK, content=content)
 
 
+def make_waf_rule(zones, **kwargs):
+    """A real CloudflareWAFRule assigned to each zone through CloudflareWAFRuleZone (the M2M
+    through-table; per-zone `enabled` left null = inherit the rule's default)."""
+    from ..models import CloudflareWAFRule, CloudflareWAFRuleZone
+
+    rule = CloudflareWAFRule.objects.create(**kwargs)
+    for zone in zones:
+        CloudflareWAFRuleZone.objects.create(rule=rule, zone=zone)
+    return rule
+
+
 def make_monitor(name="wp-https", **kwargs):
     """A real CloudflareMonitor. An https monitor requires a path + expected_codes (clean())."""
     from ..models import CloudflareMonitor

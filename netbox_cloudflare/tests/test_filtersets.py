@@ -36,7 +36,7 @@ from netbox_cloudflare.models import (
     CloudflareWAFRule,
 )
 
-from .factories import make_alias, make_monitor, make_pool, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
 
 
 class CloudflareTunnelFilterSetTest(TestCase):
@@ -123,19 +123,40 @@ class CloudflareWAFRuleFilterSetTest(TestCase):
         cls.z1 = make_zone("w1.example")
         cls.z2 = make_zone("w2.example")
         cls.alias = make_alias("exempt", "198.51.100.0/24")
-        CloudflareWAFRule.objects.create(
-            zone=cls.z1, phase=CloudflareWAFPhaseChoices.CUSTOM, expression="a", action=CloudflareWAFActionChoices.BLOCK, order=1, ip_alias=cls.alias
+        make_waf_rule(
+            [cls.z1], phase=CloudflareWAFPhaseChoices.CUSTOM, expression="a",
+            action=CloudflareWAFActionChoices.BLOCK, order=1, ip_alias=cls.alias,
         )
-        CloudflareWAFRule.objects.create(
-            zone=cls.z1, phase=CloudflareWAFPhaseChoices.RATELIMIT, expression="b", action=CloudflareWAFActionChoices.LOG, order=2
+        make_waf_rule(
+            [cls.z1], phase=CloudflareWAFPhaseChoices.RATELIMIT, expression="b",
+            action=CloudflareWAFActionChoices.LOG, order=2,
         )
-        CloudflareWAFRule.objects.create(
-            zone=cls.z2, phase=CloudflareWAFPhaseChoices.CUSTOM, expression="c", action=CloudflareWAFActionChoices.BLOCK, order=1
+        make_waf_rule(
+            [cls.z2], phase=CloudflareWAFPhaseChoices.CUSTOM, expression="c",
+            action=CloudflareWAFActionChoices.BLOCK, order=1,
+        )
+        make_waf_rule(
+            [cls.z1, cls.z2], phase=CloudflareWAFPhaseChoices.CUSTOM, expression="shared",
+            action=CloudflareWAFActionChoices.LOG, order=3, description="shared-rule",
         )
 
     def test_zone_id(self):
         self.assertEqual(
-            CloudflareWAFRuleFilterSet({"zone_id": [self.z1.pk]}, self.queryset).qs.count(), 2
+            CloudflareWAFRuleFilterSet({"zone_id": [self.z1.pk]}, self.queryset).qs.count(), 3
+        )
+
+    def test_zone_id_multi_is_distinct(self):
+        # The shared rule is assigned to both zones; filtering on both must not duplicate it.
+        self.assertEqual(
+            CloudflareWAFRuleFilterSet(
+                {"zone_id": [self.z1.pk, self.z2.pk]}, self.queryset
+            ).qs.count(),
+            4,
+        )
+
+    def test_search_by_zone_name(self):
+        self.assertEqual(
+            CloudflareWAFRuleFilterSet({"q": "w2.example"}, self.queryset).qs.count(), 2
         )
 
     def test_phase(self):

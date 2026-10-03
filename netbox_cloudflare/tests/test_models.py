@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Model tests against a real DB (no mocks): creation, str/url/color, uniqueness constraints,
 the CloudflareRecord.clean() one-driver rule, the ip_alias FK to netbox_pf.Alias, and the FK
-delete behaviors (zone PROTECT on records, zone CASCADE on WAF rules, tunnel CASCADE on ingress,
-tunnel SET_NULL on records, ip_alias PROTECT on WAF rules). Real netbox_dns Zone + netbox_pf Alias
+delete behaviors (zone PROTECT on records, zone/rule CASCADE on WAF-rule zone assignments,
+tunnel CASCADE on ingress, tunnel SET_NULL on records, ip_alias PROTECT on WAF rules). Real netbox_dns Zone + netbox_pf Alias
 instances back everything.
 
 The load-balancing tests additionally pin the failover semantics: a monitor's http/https probe
@@ -30,9 +30,10 @@ from netbox_cloudflare.models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareWAFRuleZone,
 )
 
-from .factories import make_alias, make_monitor, make_pool, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
 
 
 class CloudflareTunnelModelTest(TestCase):
@@ -187,41 +188,89 @@ class CloudflareWAFRuleModelTest(TestCase):
         cls.zone = make_zone("waf.example")
 
     def test_create_str_url_colors(self):
-        rule = CloudflareWAFRule.objects.create(
-            zone=self.zone,
+        rule = make_waf_rule(
+            [self.zone],
             phase=CloudflareWAFPhaseChoices.CUSTOM,
             expression='(ip.src in $exempt)',
             action=CloudflareWAFActionChoices.BLOCK,
             order=1,
+            description="exempt-block",
         )
-        self.assertIn("waf.example", str(rule))
+        self.assertEqual(str(rule), "exempt-block [http_request_firewall_custom] (1 zones)")
         self.assertIn("/plugins/cloudflare/waf-rules/", rule.get_absolute_url())
         self.assertEqual(rule.get_action_color(), "red")
         self.assertEqual(rule.get_phase_color(), "blue")
         self.assertTrue(rule.enabled)
+        self.assertEqual(list(rule.zones.all()), [self.zone])
 
-    def test_unique_zone_order(self):
-        CloudflareWAFRule.objects.create(
-            zone=self.zone, expression="x", action=CloudflareWAFActionChoices.LOG, order=5
+    def test_one_rule_shared_across_zones(self):
+        other = make_zone("waf-other.example")
+        rule = make_waf_rule(
+            [self.zone, other], expression="s", action=CloudflareWAFActionChoices.LOG, order=2
+        )
+        self.assertEqual(rule.zones.count(), 2)
+        self.assertIn(rule, other.waf_rules.all())
+
+    def test_unique_rule_zone_assignment(self):
+        rule = make_waf_rule(
+            [self.zone], expression="x", action=CloudflareWAFActionChoices.LOG, order=5
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
-            CloudflareWAFRule.objects.create(
-                zone=self.zone, expression="y", action=CloudflareWAFActionChoices.BLOCK, order=5
-            )
+            CloudflareWAFRuleZone.objects.create(rule=rule, zone=self.zone)
 
-    def test_cascade_from_zone(self):
+    def test_effective_enabled_inherits_then_overrides(self):
+        rule = make_waf_rule(
+            [self.zone], expression="e", action=CloudflareWAFActionChoices.BLOCK, order=6
+        )
+        assignment = rule.zone_assignments.get()
+        self.assertIsNone(assignment.enabled)
+        self.assertTrue(assignment.effective_enabled)
+        assignment.enabled = False
+        assignment.save()
+        self.assertFalse(assignment.effective_enabled)
+        rule.enabled = False
+        rule.save()
+        assignment.enabled = True
+        assignment.save()
+        self.assertTrue(CloudflareWAFRuleZone.objects.get(pk=assignment.pk).effective_enabled)
+
+    def test_set_zone_assignments_reconciles(self):
+        z2, z3 = make_zone("waf-set2.example"), make_zone("waf-set3.example")
+        rule = make_waf_rule(
+            [self.zone, z2], expression="set", action=CloudflareWAFActionChoices.LOG, order=8
+        )
+        kept_pk = rule.zone_assignments.get(zone=z2).pk
+        rule.set_zone_assignments({z2: False, z3: None})
+        self.assertEqual(
+            {za.zone_id: za.enabled for za in rule.zone_assignments.all()},
+            {z2.pk: False, z3.pk: None},
+        )
+        # The surviving assignment is updated in place, not recreated.
+        self.assertEqual(rule.zone_assignments.get(zone=z2).pk, kept_pk)
+        rule.set_zone_assignments({})
+        self.assertFalse(rule.zone_assignments.exists())
+
+    def test_zone_delete_cascades_assignment_not_rule(self):
         zone = make_zone("cascade.example")
-        rule = CloudflareWAFRule.objects.create(
-            zone=zone, expression="z", action=CloudflareWAFActionChoices.BLOCK, order=1
+        rule = make_waf_rule(
+            [zone], expression="z", action=CloudflareWAFActionChoices.BLOCK, order=1
+        )
+        zone.delete()
+        self.assertTrue(CloudflareWAFRule.objects.filter(pk=rule.pk).exists())
+        self.assertFalse(CloudflareWAFRuleZone.objects.filter(rule=rule).exists())
+
+    def test_rule_delete_cascades_assignments(self):
+        rule = make_waf_rule(
+            [self.zone], expression="d", action=CloudflareWAFActionChoices.BLOCK, order=7
         )
         pk = rule.pk
-        zone.delete()
-        self.assertFalse(CloudflareWAFRule.objects.filter(pk=pk).exists())
+        rule.delete()
+        self.assertFalse(CloudflareWAFRuleZone.objects.filter(rule_id=pk).exists())
 
     def test_ip_alias_fk(self):
         alias = make_alias("exempt", "198.51.100.0/24\n203.0.113.0/24")
-        rule = CloudflareWAFRule.objects.create(
-            zone=self.zone,
+        rule = make_waf_rule(
+            [self.zone],
             expression="m",
             action=CloudflareWAFActionChoices.SKIP,
             order=10,
@@ -232,8 +281,8 @@ class CloudflareWAFRuleModelTest(TestCase):
 
     def test_ip_alias_protect_on_delete(self):
         alias = make_alias("protected-alias", "198.51.100.0/24")
-        CloudflareWAFRule.objects.create(
-            zone=self.zone,
+        make_waf_rule(
+            [self.zone],
             expression="p",
             action=CloudflareWAFActionChoices.BLOCK,
             order=11,

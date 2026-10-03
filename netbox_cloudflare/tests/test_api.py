@@ -6,6 +6,8 @@ ships no GraphQL type yet. Records carry exactly one target driver so Cloudflare
 passes on create; one WAF rule references a netbox_pf.Alias via ip_alias; ingress rules use
 distinct orders so the (tunnel, order) constraint never trips inside the create batch."""
 
+from decimal import Decimal
+
 from utilities.testing import APIViewTestCases
 
 from netbox_cloudflare.models import (
@@ -20,20 +22,26 @@ from netbox_cloudflare.models import (
     CloudflareWAFRule,
 )
 
-from .factories import make_alias, make_monitor, make_pool, make_zone
+from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
 
 
-class _CRUD(
+class _Namespace:
+    view_namespace = "plugins-api:netbox_cloudflare"
+
+
+# A tuple of bases, not a TestCase subclass: the test loader would otherwise collect the shared
+# base itself and run every CRUD test against model=None.
+_CRUD = (
+    _Namespace,
     APIViewTestCases.GetObjectViewTestCase,
     APIViewTestCases.ListObjectsViewTestCase,
     APIViewTestCases.CreateObjectViewTestCase,
     APIViewTestCases.UpdateObjectViewTestCase,
     APIViewTestCases.DeleteObjectViewTestCase,
-):
-    pass
+)
 
 
-class CloudflareTunnelAPITest(_CRUD):
+class CloudflareTunnelAPITest(*_CRUD):
     model = CloudflareTunnel
     brief_fields = ["account", "display", "id", "name", "tunnel_id", "url"]
     bulk_update_data = {"account": "bulk-acct"}
@@ -54,7 +62,7 @@ class CloudflareTunnelAPITest(_CRUD):
         ]
 
 
-class CloudflareIngressAPITest(_CRUD):
+class CloudflareIngressAPITest(*_CRUD):
     model = CloudflareIngress
     brief_fields = ["display", "hostname", "id", "order", "service", "tunnel", "url"]
     bulk_update_data = {"path": "/v2"}
@@ -76,7 +84,7 @@ class CloudflareIngressAPITest(_CRUD):
         ]
 
 
-class CloudflareRecordAPITest(_CRUD):
+class CloudflareRecordAPITest(*_CRUD):
     model = CloudflareRecord
     brief_fields = ["display", "id", "name", "type", "url", "zone"]
     bulk_update_data = {"proxied": False}
@@ -105,25 +113,20 @@ class CloudflareRecordAPITest(_CRUD):
         ]
 
 
-class CloudflareWAFRuleAPITest(_CRUD):
+class CloudflareWAFRuleAPITest(*_CRUD):
     model = CloudflareWAFRule
-    brief_fields = ["action", "display", "id", "order", "phase", "url", "zone"]
+    brief_fields = ["action", "description", "display", "id", "order", "phase", "url"]
     bulk_update_data = {"enabled": False}
 
     @classmethod
     def setUpTestData(cls):
-        zone = make_zone("waf-api.example")
+        cls.zone = make_zone("waf-api.example")
+        cls.zone2 = make_zone("waf-api2.example")
         cls.alias = make_alias("exempt", "198.51.100.0/24")
-        CloudflareWAFRule.objects.bulk_create(
-            [
-                CloudflareWAFRule(zone=zone, expression="a", action="block", order=1),
-                CloudflareWAFRule(zone=zone, expression="b", action="log", order=2),
-                CloudflareWAFRule(zone=zone, expression="c", action="challenge", order=3),
-            ]
-        )
+        for expression, action, order in (("a", "block", 1), ("b", "log", 2), ("c", "challenge", 3)):
+            make_waf_rule([cls.zone], expression=expression, action=action, order=order)
         cls.create_data = [
             {
-                "zone": zone.pk,
                 "phase": "http_request_firewall_custom",
                 "expression": "(ip.src in $exempt)",
                 "action": "block",
@@ -131,7 +134,6 @@ class CloudflareWAFRuleAPITest(_CRUD):
                 "ip_alias": cls.alias.pk,
             },
             {
-                "zone": zone.pk,
                 "phase": "http_ratelimit",
                 "expression": "(http.request.uri.path eq \"/login\")",
                 "action": "managed_challenge",
@@ -140,7 +142,6 @@ class CloudflareWAFRuleAPITest(_CRUD):
                 "ratelimit_period": 60,
             },
             {
-                "zone": zone.pk,
                 "phase": "http_request_firewall_managed",
                 "expression": "(cf.bot_management.score lt 30)",
                 "action": "js_challenge",
@@ -148,8 +149,40 @@ class CloudflareWAFRuleAPITest(_CRUD):
             },
         ]
 
+    def test_create_writes_zone_assignments(self):
+        self.add_permissions("netbox_cloudflare.add_cloudflarewafrule")
+        payload = {
+            "expression": "(ip.src in $exempt)",
+            "action": "block",
+            "order": 40,
+            "zone_assignments": [
+                {"zone": self.zone.pk, "enabled": None},
+                {"zone": self.zone2.pk, "enabled": False},
+            ],
+        }
+        response = self.client.post(self._get_list_url(), payload, format="json", **self.header)
+        self.assertHttpStatus(response, 201)
+        rule = CloudflareWAFRule.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            {za.zone_id: za.enabled for za in rule.zone_assignments.all()},
+            {self.zone.pk: None, self.zone2.pk: False},
+        )
 
-class CloudflareMonitorAPITest(_CRUD):
+    def test_update_reconciles_zone_assignments(self):
+        self.add_permissions("netbox_cloudflare.change_cloudflarewafrule")
+        rule = make_waf_rule([self.zone], expression="r", action="log", order=50)
+        payload = {"zone_assignments": [{"zone": self.zone2.pk, "enabled": True}]}
+        response = self.client.patch(
+            self._get_detail_url(rule), payload, format="json", **self.header
+        )
+        self.assertHttpStatus(response, 200)
+        self.assertEqual(
+            {za.zone_id: za.enabled for za in rule.zone_assignments.all()},
+            {self.zone2.pk: True},
+        )
+
+
+class CloudflareMonitorAPITest(*_CRUD):
     model = CloudflareMonitor
     brief_fields = ["display", "id", "name", "type", "url"]
     bulk_update_data = {"retries": 3}
@@ -172,7 +205,7 @@ class CloudflareMonitorAPITest(_CRUD):
         ]
 
 
-class CloudflareLBPoolAPITest(_CRUD):
+class CloudflareLBPoolAPITest(*_CRUD):
     model = CloudflareLBPool
     brief_fields = ["display", "enabled", "id", "name", "url"]
     bulk_update_data = {"enabled": False}
@@ -189,7 +222,7 @@ class CloudflareLBPoolAPITest(_CRUD):
         ]
 
 
-class CloudflareLBOriginAPITest(_CRUD):
+class CloudflareLBOriginAPITest(*_CRUD):
     model = CloudflareLBOrigin
     brief_fields = ["address", "display", "id", "name", "pool", "url"]
     bulk_update_data = {"enabled": False}
@@ -208,12 +241,15 @@ class CloudflareLBOriginAPITest(_CRUD):
                 "pool": pool.pk, "name": "omg-wan", "address": "203.0.113.100",
                 "header": {"Host": ["tolleytire.com"]},
             },
-            {"pool": pool.pk, "name": "house-wan", "address": "198.18.0.100", "weight": "0.500"},
+            {
+                "pool": pool.pk, "name": "house-wan", "address": "198.18.0.100",
+                "weight": Decimal("0.500"),
+            },
             {"pool": pool.pk, "name": "disabled", "address": "198.18.0.101", "enabled": False},
         ]
 
 
-class CloudflareLoadBalancerAPITest(_CRUD):
+class CloudflareLoadBalancerAPITest(*_CRUD):
     model = CloudflareLoadBalancer
     brief_fields = ["display", "enabled", "id", "name", "url", "zone"]
     bulk_update_data = {"session_affinity": "cookie"}
@@ -235,7 +271,7 @@ class CloudflareLoadBalancerAPITest(_CRUD):
         ]
 
 
-class CloudflareLBDefaultPoolAPITest(_CRUD):
+class CloudflareLBDefaultPoolAPITest(*_CRUD):
     model = CloudflareLBDefaultPool
     brief_fields = ["display", "id", "load_balancer", "order", "pool", "url"]
     bulk_update_data = {"order": 50}
@@ -243,11 +279,16 @@ class CloudflareLBDefaultPoolAPITest(_CRUD):
     @classmethod
     def setUpTestData(cls):
         zone = make_zone("dp.example")
-        cls.lb = CloudflareLoadBalancer.objects.create(zone=zone, name="dp.example")
+        # One existing row per load balancer: the bulk update sets every row to the same order,
+        # which (lb, order) uniqueness only allows when no two rows share a load balancer.
         existing = [make_pool(f"dp-ex{i}") for i in range(3)]
+        existing_lbs = [
+            CloudflareLoadBalancer.objects.create(zone=zone, name=f"ex{i}.dp.example")
+            for i in range(3)
+        ]
         CloudflareLBDefaultPool.objects.bulk_create(
             [
-                CloudflareLBDefaultPool(load_balancer=cls.lb, pool=p, order=i + 1)
+                CloudflareLBDefaultPool(load_balancer=existing_lbs[i], pool=p, order=1)
                 for i, p in enumerate(existing)
             ]
         )

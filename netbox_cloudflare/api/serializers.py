@@ -98,7 +98,15 @@ class CloudflareRecordSerializer(NetBoxModelSerializer):
         brief_fields = ["id", "url", "display", "zone", "name", "type"]
 
 
-class CloudflareWAFRuleZoneSerializer(NetBoxModelSerializer):
+def _zone_enabled_map(assignments):
+    """Validated nested assignments -> {zone: enabled}, the shape set_zone_assignments takes."""
+    return {a["zone"]: a.get("enabled") for a in assignments}
+
+
+class CloudflareWAFRuleZoneSerializer(serializers.ModelSerializer):
+    """One zone assignment nested in a WAF rule. A plain ModelSerializer: the rule FK is set by
+    the parent on save, so NetBox's full_clean-on-validate would reject every assignment."""
+
     zone = ZoneSerializer(nested=True)
 
     class Meta:
@@ -111,8 +119,22 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
         view_name="plugins-api:netbox_cloudflare-api:cloudflarewafrule-detail"
     )
     zones = ZoneSerializer(nested=True, many=True, read_only=True)
-    zone_assignments = CloudflareWAFRuleZoneSerializer(many=True, read_only=True)
+    zone_assignments = CloudflareWAFRuleZoneSerializer(many=True, required=False)
     ip_alias = AliasSerializer(nested=True, required=False, allow_null=True)
+
+    def create(self, validated_data):
+        assignments = validated_data.pop("zone_assignments", None)
+        instance = super().create(validated_data)
+        if assignments is not None:
+            instance.set_zone_assignments(_zone_enabled_map(assignments))
+        return instance
+
+    def update(self, instance, validated_data):
+        assignments = validated_data.pop("zone_assignments", None)
+        instance = super().update(instance, validated_data)
+        if assignments is not None:
+            instance.set_zone_assignments(_zone_enabled_map(assignments))
+        return instance
 
     class Meta:
         model = CloudflareWAFRule
