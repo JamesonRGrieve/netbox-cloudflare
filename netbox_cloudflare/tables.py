@@ -12,6 +12,7 @@ from .models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 
 
@@ -125,6 +126,17 @@ class CloudflareWAFRuleTable(NetBoxTable):
             "last_updated",
         )
         default_columns = ("zone", "phase", "description", "action", "order", "enabled")
+
+
+class CloudflareZoneSettingsTable(NetBoxTable):
+    zone = tables.Column(linkify=True)
+    bot_fight_mode = columns.BooleanColumn()
+    tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarezonesettings_list")
+
+    class Meta(NetBoxTable.Meta):
+        model = CloudflareZoneSettings
+        fields = ("pk", "id", "zone", "bot_fight_mode", "tags", "created", "last_updated")
+        default_columns = ("pk", "zone", "bot_fight_mode")
 
 
 class CloudflareMonitorTable(NetBoxTable):

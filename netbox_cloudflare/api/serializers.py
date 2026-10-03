@@ -15,6 +15,7 @@ from ..models import (
     CloudflareTunnel,
     CloudflareWAFRule,
     CloudflareWAFRuleZone,
+    CloudflareZoneSettings,
 )
 
 
@@ -159,6 +160,28 @@ class CloudflareWAFRuleSerializer(NetBoxModelSerializer):
             "last_updated",
         ]
         brief_fields = ["id", "url", "display", "description", "phase", "action", "order"]
+
+
+class CloudflareZoneSettingsSerializer(NetBoxModelSerializer):
+    url = serializers.HyperlinkedIdentityField(
+        view_name="plugins-api:netbox_cloudflare-api:cloudflarezonesettings-detail"
+    )
+    zone = ZoneSerializer(nested=True)
+
+    class Meta:
+        model = CloudflareZoneSettings
+        fields = [
+            "id",
+            "url",
+            "display",
+            "zone",
+            "bot_fight_mode",
+            "tags",
+            "custom_fields",
+            "created",
+            "last_updated",
+        ]
+        brief_fields = ["bot_fight_mode", "display", "id", "url", "zone"]
 
 
 class CloudflareMonitorSerializer(NetBoxModelSerializer):

@@ -20,6 +20,7 @@ from netbox_cloudflare.models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 
 from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
@@ -180,6 +181,23 @@ class CloudflareWAFRuleAPITest(*_CRUD):
             {za.zone_id: za.enabled for za in rule.zone_assignments.all()},
             {self.zone2.pk: True},
         )
+
+
+class CloudflareZoneSettingsAPITest(*_CRUD):
+    model = CloudflareZoneSettings
+    brief_fields = ["bot_fight_mode", "display", "id", "url", "zone"]
+    bulk_update_data = {"bot_fight_mode": False}
+
+    @classmethod
+    def setUpTestData(cls):
+        CloudflareZoneSettings.objects.bulk_create(
+            [CloudflareZoneSettings(zone=make_zone(f"zs-ex{i}.example")) for i in range(3)]
+        )
+        cls.create_data = [
+            {"zone": make_zone("zs-new0.example").pk},
+            {"zone": make_zone("zs-new1.example").pk, "bot_fight_mode": False},
+            {"zone": make_zone("zs-new2.example").pk, "bot_fight_mode": True},
+        ]
 
 
 class CloudflareMonitorAPITest(*_CRUD):

@@ -23,6 +23,7 @@ from netbox_cloudflare.filtersets import (
     CloudflareRecordFilterSet,
     CloudflareTunnelFilterSet,
     CloudflareWAFRuleFilterSet,
+    CloudflareZoneSettingsFilterSet,
 )
 from netbox_cloudflare.models import (
     CloudflareIngress,
@@ -34,9 +35,34 @@ from netbox_cloudflare.models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 
 from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
+
+
+class CloudflareZoneSettingsFilterSetTest(TestCase):
+    queryset = CloudflareZoneSettings.objects.all()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.on = make_zone("on.example")
+        cls.off = make_zone("off.example")
+        CloudflareZoneSettings.objects.create(zone=cls.on)
+        CloudflareZoneSettings.objects.create(zone=cls.off, bot_fight_mode=False)
+
+    def test_zone_id(self):
+        qs = CloudflareZoneSettingsFilterSet({"zone_id": [self.off.pk]}, self.queryset).qs
+        self.assertEqual(list(qs.values_list("zone__name", flat=True)), ["off.example"])
+
+    def test_bot_fight_mode(self):
+        qs = CloudflareZoneSettingsFilterSet({"bot_fight_mode": False}, self.queryset).qs
+        self.assertEqual(list(qs.values_list("zone__name", flat=True)), ["off.example"])
+
+    def test_search(self):
+        self.assertEqual(
+            CloudflareZoneSettingsFilterSet({"q": "on.ex"}, self.queryset).qs.count(), 1
+        )
 
 
 class CloudflareTunnelFilterSetTest(TestCase):

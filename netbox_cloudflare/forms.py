@@ -27,6 +27,7 @@ from .models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 
 
@@ -149,6 +150,25 @@ class CloudflareWAFRuleFilterForm(NetBoxModelFilterSetForm):
     action = forms.MultipleChoiceField(choices=CloudflareWAFActionChoices, required=False)
     enabled = forms.NullBooleanField(required=False)
     tag = TagFilterField(CloudflareWAFRule)
+
+
+class CloudflareZoneSettingsForm(NetBoxModelForm):
+    zone = DynamicModelChoiceField(queryset=Zone.objects.all())
+
+    fieldsets = (FieldSet("zone", "bot_fight_mode", name="Zone Settings"),)
+
+    class Meta:
+        model = CloudflareZoneSettings
+        fields = ["zone", "bot_fight_mode", "tags"]
+
+
+class CloudflareZoneSettingsFilterForm(NetBoxModelFilterSetForm):
+    model = CloudflareZoneSettings
+    zone_id = DynamicModelMultipleChoiceField(
+        queryset=Zone.objects.all(), required=False, label="Zone"
+    )
+    bot_fight_mode = forms.NullBooleanField(required=False)
+    tag = TagFilterField(CloudflareZoneSettings)
 
 
 class CloudflareMonitorForm(NetBoxModelForm):

@@ -67,7 +67,7 @@ FKs `netbox_pf`'s `Alias` — the same named-list primitive the firewall uses �
 | `choices.py` | `CloudflareRecordTypeChoices` (A/AAAA/CNAME/TXT/MX/SRV), `CloudflareWAFPhaseChoices`, `CloudflareWAFActionChoices` — values match the `cloudflare/cloudflare` provider |
 | `models.py` | The four models (see §Models) |
 | `migrations/` | hand-authored (NetBox disables `makemigrations` in prod); verify with `makemigrations --check --dry-run` on an ephemeral NetBox |
-| `api/serializers.py`, `api/views.py`, `api/urls.py` | REST API (`NetBoxModelViewSet`) — endpoints `tunnels`, `ingress-rules`, `records`, `waf-rules` under `/api/plugins/cloudflare/` |
+| `api/serializers.py`, `api/views.py`, `api/urls.py` | REST API (`NetBoxModelViewSet`) — endpoints `tunnels`, `ingress-rules`, `records`, `waf-rules`, `zone-settings` under `/api/plugins/cloudflare/` |
 | `filtersets.py` | `NetBoxModelFilterSet`: explicit `zone_id` / `tunnel_id` / `ip_alias_id` FK filters + `type`/`phase`/`action`/`proxied`/`ddns_enabled` choice/bool filters |
 | `tables.py`, `forms.py`, `navigation.py`, `views.py`, `urls.py` | UI layer |
 | `graphql/` | GraphQL types (none shipped yet — `NetBoxModel` still exposes auto GraphQL) |
@@ -88,6 +88,8 @@ FKs `netbox_pf`'s `Alias` — the same named-list primitive the firewall uses �
   (null), FK `netbox_pf.Alias` (`ip_alias`, PROTECT, null — the named IP list, the same primitive
   the firewall uses, referenced as `$<alias name>` in the expression). `UniqueConstraint(zone,
   order)`.
+- **CloudflareZoneSettings**: OneToOne `netbox_dns.Zone` (CASCADE, `cloudflare_settings`),
+  `bot_fight_mode` (default True). One row of zone-wide toggles per zone.
 
 `zone` is PROTECT on records (a referenced zone can't be deleted out from under a record) and
 CASCADE on WAF rules (drop the zone, its rules go); `tunnel` CASCADEs ingress and SET_NULLs records;
@@ -113,6 +115,9 @@ old config-context reads:
   `netbox_pf.Alias`) sources the account-level `cloudflare_list` the expression references via
   `$<alias name>` — replacing the `security.custom_rules` / `exemption_ips` config-context keys in
   `cloudflare.tf`.
+- **Zone toggles** — `CloudflareZoneSettings.bot_fight_mode` feeds `cloudflare_bot_management`
+  (`fight_mode`) per zone. Every active pipeline-owned zone carries a row; the module fails the plan
+  on a missing one rather than leave the zone's live setting unmanaged.
 
 ---
 

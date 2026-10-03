@@ -31,9 +31,34 @@ from netbox_cloudflare.models import (
     CloudflareTunnel,
     CloudflareWAFRule,
     CloudflareWAFRuleZone,
+    CloudflareZoneSettings,
 )
 
 from .factories import make_alias, make_monitor, make_pool, make_waf_rule, make_zone
+
+
+class CloudflareZoneSettingsModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.zone = make_zone("settings.example")
+
+    def test_create_str_url_defaults_bot_fight_on(self):
+        s = CloudflareZoneSettings.objects.create(zone=self.zone)
+        self.assertTrue(s.bot_fight_mode)
+        self.assertEqual(str(s), "settings.example settings")
+        self.assertIn("/plugins/cloudflare/zone-settings/", s.get_absolute_url())
+        self.assertEqual(self.zone.cloudflare_settings, s)
+
+    def test_one_row_per_zone(self):
+        CloudflareZoneSettings.objects.create(zone=self.zone)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CloudflareZoneSettings.objects.create(zone=self.zone, bot_fight_mode=False)
+
+    def test_zone_delete_cascades(self):
+        zone = make_zone("gone.example")
+        CloudflareZoneSettings.objects.create(zone=zone, bot_fight_mode=False)
+        zone.delete()
+        self.assertFalse(CloudflareZoneSettings.objects.filter(zone__name="gone.example").exists())
 
 
 class CloudflareTunnelModelTest(TestCase):

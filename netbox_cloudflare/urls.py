@@ -71,6 +71,16 @@ urlpatterns = [
         views.CloudflareWAFRuleBulkDeleteView,
     ),
     *_crud(
+        "zone-settings",
+        "cloudflarezonesettings",
+        models.CloudflareZoneSettings,
+        views.CloudflareZoneSettingsView,
+        views.CloudflareZoneSettingsListView,
+        views.CloudflareZoneSettingsEditView,
+        views.CloudflareZoneSettingsDeleteView,
+        views.CloudflareZoneSettingsBulkDeleteView,
+    ),
+    *_crud(
         "monitors",
         "cloudflaremonitor",
         models.CloudflareMonitor,

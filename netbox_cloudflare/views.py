@@ -104,6 +104,31 @@ class CloudflareWAFRuleBulkDeleteView(generic.BulkDeleteView):
     table = tables.CloudflareWAFRuleTable
 
 
+class CloudflareZoneSettingsView(generic.ObjectView):
+    queryset = models.CloudflareZoneSettings.objects.all()
+
+
+class CloudflareZoneSettingsListView(generic.ObjectListView):
+    queryset = models.CloudflareZoneSettings.objects.all()
+    table = tables.CloudflareZoneSettingsTable
+    filterset = filtersets.CloudflareZoneSettingsFilterSet
+    filterset_form = forms.CloudflareZoneSettingsFilterForm
+
+
+class CloudflareZoneSettingsEditView(generic.ObjectEditView):
+    queryset = models.CloudflareZoneSettings.objects.all()
+    form = forms.CloudflareZoneSettingsForm
+
+
+class CloudflareZoneSettingsDeleteView(generic.ObjectDeleteView):
+    queryset = models.CloudflareZoneSettings.objects.all()
+
+
+class CloudflareZoneSettingsBulkDeleteView(generic.BulkDeleteView):
+    queryset = models.CloudflareZoneSettings.objects.all()
+    table = tables.CloudflareZoneSettingsTable
+
+
 class CloudflareMonitorView(generic.ObjectView):
     queryset = models.CloudflareMonitor.objects.all()
 

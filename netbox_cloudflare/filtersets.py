@@ -22,6 +22,7 @@ from .models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 
 
@@ -96,6 +97,19 @@ class CloudflareWAFRuleFilterSet(NetBoxModelFilterSet):
             | Q(expression__icontains=value)
             | Q(zones__name__icontains=value)
         ).distinct()
+
+
+class CloudflareZoneSettingsFilterSet(NetBoxModelFilterSet):
+    zone_id = django_filters.ModelMultipleChoiceFilter(
+        field_name="zone", queryset=Zone.objects.all(), label="Zone (ID)"
+    )
+
+    class Meta:
+        model = CloudflareZoneSettings
+        fields = ["id", "bot_fight_mode"]
+
+    def search(self, queryset, name, value):
+        return queryset.filter(zone__name__icontains=value)
 
 
 class CloudflareMonitorFilterSet(NetBoxModelFilterSet):

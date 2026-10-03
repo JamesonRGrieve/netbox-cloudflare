@@ -8,6 +8,7 @@
   exactly one of static ``content`` / ``tunnel`` / ``ddns`` drives the record's target.
 * ``CloudflareWAFRule`` — a per-zone WAF rule (expression + action), optionally matching an IP
   list held in a ``netbox_pf`` ``Alias`` (the same named-list primitive the firewall uses).
+* ``CloudflareZoneSettings`` — one row per zone of zone-wide toggles (Bot Fight Mode).
 
 Load balancing — DNS-tier failover, which survives the total loss of an origin site (its edge
 router, power, or ISP), unlike any load balancer running *at* that origin:
@@ -325,6 +326,33 @@ class CloudflareWAFRuleZone(NetBoxModel):
     @property
     def effective_enabled(self):
         return self.rule.enabled if self.enabled is None else self.enabled
+
+
+class CloudflareZoneSettings(NetBoxModel):
+    """Per-zone Cloudflare toggles — at most one row per ``netbox_dns`` zone. Every active zone
+    the pipeline owns carries a row; the tofu module refuses to plan when one is missing."""
+
+    zone = models.OneToOneField(
+        "netbox_dns.Zone",
+        on_delete=models.CASCADE,
+        related_name="cloudflare_settings",
+        help_text="The DNS zone (netbox_dns) these settings apply to.",
+    )
+    bot_fight_mode = models.BooleanField(
+        default=True,
+        help_text="Cloudflare Bot Fight Mode (zone-wide). Cannot be bypassed by WAF skip rules.",
+    )
+
+    class Meta:
+        ordering = ["zone"]
+        verbose_name = "Cloudflare Zone Settings"
+        verbose_name_plural = "Cloudflare Zone Settings"
+
+    def __str__(self):
+        return f"{self.zone} settings"
+
+    def get_absolute_url(self):
+        return reverse("plugins:netbox_cloudflare:cloudflarezonesettings", args=[self.pk])
 
 
 class CloudflareMonitor(NetBoxModel):

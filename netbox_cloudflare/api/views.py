@@ -12,6 +12,7 @@ from ..models import (
     CloudflareRecord,
     CloudflareTunnel,
     CloudflareWAFRule,
+    CloudflareZoneSettings,
 )
 from .serializers import (
     CloudflareIngressSerializer,
@@ -23,6 +24,7 @@ from .serializers import (
     CloudflareRecordSerializer,
     CloudflareTunnelSerializer,
     CloudflareWAFRuleSerializer,
+    CloudflareZoneSettingsSerializer,
 )
 
 
@@ -48,6 +50,12 @@ class CloudflareWAFRuleViewSet(NetBoxModelViewSet):
     queryset = CloudflareWAFRule.objects.prefetch_related("zones", "zone_assignments", "zone_assignments__zone", "ip_alias", "tags")
     serializer_class = CloudflareWAFRuleSerializer
     filterset_class = filtersets.CloudflareWAFRuleFilterSet
+
+
+class CloudflareZoneSettingsViewSet(NetBoxModelViewSet):
+    queryset = CloudflareZoneSettings.objects.prefetch_related("zone", "tags")
+    serializer_class = CloudflareZoneSettingsSerializer
+    filterset_class = filtersets.CloudflareZoneSettingsFilterSet
 
 
 class CloudflareMonitorViewSet(NetBoxModelViewSet):

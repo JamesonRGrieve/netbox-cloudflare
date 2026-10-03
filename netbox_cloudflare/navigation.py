@@ -22,6 +22,7 @@ menu = PluginMenu(
             (
                 _item("cloudflarerecord", "Records"),
                 _item("cloudflarewafrule", "WAF Rules"),
+                _item("cloudflarezonesettings", "Zone Settings"),
             ),
         ),
         (
