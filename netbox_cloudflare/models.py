@@ -139,6 +139,11 @@ class CloudflareRecord(NetBoxModel):
     ttl = models.PositiveIntegerField(
         default=1, help_text="TTL in seconds; 1 means automatic (required when proxied)."
     )
+    priority = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="MX preference (lower is preferred); empty means 0. MX records only.",
+    )
     ddns_enabled = models.BooleanField(
         default=False, help_text="Content is updated from a dynamic source after creation."
     )
@@ -202,6 +207,8 @@ class CloudflareRecord(NetBoxModel):
                 )
         if self.ddns_enabled and not self.ddns_source:
             raise ValidationError({"ddns_source": "A DDNS source is required when DDNS is enabled."})
+        if self.priority is not None and self.type != CloudflareRecordTypeChoices.MX:
+            raise ValidationError({"priority": "Only MX records carry a priority."})
 
 
 class CloudflareWAFRule(NetBoxModel):

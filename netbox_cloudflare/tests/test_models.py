@@ -150,6 +150,19 @@ class CloudflareRecordModelTest(TestCase):
         )
         r.clean()
 
+    def test_priority_unset_by_default_and_mx_only(self):
+        mx = CloudflareRecord.objects.create(
+            zone=self.zone, name="@", type=CloudflareRecordTypeChoices.MX, content="mx1.example.net"
+        )
+        self.assertIsNone(mx.priority)
+        mx.priority = 10
+        mx.clean()  # MX may carry a priority
+        a = CloudflareRecord(
+            zone=self.zone, name="p", type=CloudflareRecordTypeChoices.A, content="203.0.113.9", priority=10
+        )
+        with self.assertRaises(ValidationError):
+            a.clean()
+
     def test_clean_ddns_ok(self):
         r = CloudflareRecord(
             zone=self.zone,

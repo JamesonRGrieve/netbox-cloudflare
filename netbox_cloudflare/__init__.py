@@ -29,7 +29,7 @@ DNS zones come from the ``netbox_dns`` plugin and the WAF IP-list ``Alias`` from
 
 from netbox.plugins import PluginConfig
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 
 class NetBoxCloudflareConfig(PluginConfig):

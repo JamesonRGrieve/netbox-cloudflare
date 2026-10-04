@@ -68,7 +68,7 @@ class CloudflareRecordFilterSet(NetBoxModelFilterSet):
 
     class Meta:
         model = CloudflareRecord
-        fields = ["id", "name", "content", "proxied", "ttl", "ddns_enabled", "ddns_source", "unmanaged"]
+        fields = ["id", "name", "content", "priority", "proxied", "ttl", "ddns_enabled", "ddns_source", "unmanaged"]
 
     def search(self, queryset, name, value):
         return queryset.filter(

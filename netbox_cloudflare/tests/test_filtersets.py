@@ -115,7 +115,9 @@ class CloudflareRecordFilterSetTest(TestCase):
         cls.z2 = make_zone("z2.example")
         cls.tunnel = CloudflareTunnel.objects.create(name="t", account="a", tunnel_id="u")
         CloudflareRecord.objects.create(zone=cls.z1, name="www", type=CloudflareRecordTypeChoices.A, content="203.0.113.1")
-        CloudflareRecord.objects.create(zone=cls.z1, name="mail", type=CloudflareRecordTypeChoices.MX, content="mx.z1.example")
+        CloudflareRecord.objects.create(
+            zone=cls.z1, name="mail", type=CloudflareRecordTypeChoices.MX, content="mx.z1.example", priority=10
+        )
         CloudflareRecord.objects.create(
             zone=cls.z2, name="dyn", type=CloudflareRecordTypeChoices.A, ddns_enabled=True, ddns_source="wan0"
         )
@@ -143,6 +145,9 @@ class CloudflareRecordFilterSetTest(TestCase):
         self.assertEqual(
             CloudflareRecordFilterSet({"ddns_enabled": True}, self.queryset).qs.count(), 1
         )
+
+    def test_priority(self):
+        self.assertEqual(CloudflareRecordFilterSet({"priority": [10]}, self.queryset).qs.count(), 1)
 
 
 class CloudflareWAFRuleFilterSetTest(TestCase):

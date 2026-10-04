@@ -73,7 +73,7 @@ class CloudflareRecordForm(NetBoxModelForm):
 
     fieldsets = (
         FieldSet("zone", "name", "type", name="Record"),
-        FieldSet("content", "tunnel", name="Static / Tunnel target"),
+        FieldSet("content", "priority", "tunnel", name="Static / Tunnel target"),
         FieldSet("ddns_enabled", "ddns_source", name="DDNS"),
         FieldSet("proxied", "ttl", name="Edge"),
         FieldSet("unmanaged", name="Management"),
@@ -86,6 +86,7 @@ class CloudflareRecordForm(NetBoxModelForm):
             "name",
             "type",
             "content",
+            "priority",
             "proxied",
             "ttl",
             "ddns_enabled",

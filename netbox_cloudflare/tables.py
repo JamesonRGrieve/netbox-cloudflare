@@ -78,6 +78,7 @@ class CloudflareRecordTable(NetBoxTable):
             "name",
             "type",
             "content",
+            "priority",
             "proxied",
             "ttl",
             "ddns_enabled",

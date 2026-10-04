@@ -85,6 +85,7 @@ class CloudflareRecordSerializer(NetBoxModelSerializer):
             "name",
             "type",
             "content",
+            "priority",
             "proxied",
             "ttl",
             "ddns_enabled",

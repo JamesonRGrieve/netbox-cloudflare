@@ -104,6 +104,7 @@ class CloudflareRecordAPITest(*_CRUD):
         cls.create_data = [
             {"zone": zone.pk, "name": "static", "type": "A", "content": "203.0.113.10"},
             {"zone": zone.pk, "name": "tun", "type": "CNAME", "tunnel": tunnel.pk},
+            {"zone": zone.pk, "name": "@", "type": "MX", "content": "mx1.api.example", "priority": 10},
             {
                 "zone": zone.pk,
                 "name": "dyn",
