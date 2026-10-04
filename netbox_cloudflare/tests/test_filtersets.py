@@ -48,7 +48,7 @@ class CloudflareZoneSettingsFilterSetTest(TestCase):
     def setUpTestData(cls):
         cls.on = make_zone("on.example")
         cls.off = make_zone("off.example")
-        CloudflareZoneSettings.objects.create(zone=cls.on)
+        CloudflareZoneSettings.objects.create(zone=cls.on, ssl_mode="strict")
         CloudflareZoneSettings.objects.create(zone=cls.off, bot_fight_mode=False)
 
     def test_zone_id(self):
@@ -58,6 +58,10 @@ class CloudflareZoneSettingsFilterSetTest(TestCase):
     def test_bot_fight_mode(self):
         qs = CloudflareZoneSettingsFilterSet({"bot_fight_mode": False}, self.queryset).qs
         self.assertEqual(list(qs.values_list("zone__name", flat=True)), ["off.example"])
+
+    def test_ssl_mode(self):
+        qs = CloudflareZoneSettingsFilterSet({"ssl_mode": ["strict"]}, self.queryset).qs
+        self.assertEqual(list(qs.values_list("zone__name", flat=True)), ["on.example"])
 
     def test_search(self):
         self.assertEqual(

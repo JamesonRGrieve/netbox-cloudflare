@@ -9,6 +9,7 @@ from .choices import (
     CloudflareLBSteeringChoices,
     CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
+    CloudflareSSLModeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
 )
@@ -103,6 +104,8 @@ class CloudflareZoneSettingsFilterSet(NetBoxModelFilterSet):
     zone_id = django_filters.ModelMultipleChoiceFilter(
         field_name="zone", queryset=Zone.objects.all(), label="Zone (ID)"
     )
+
+    ssl_mode = django_filters.MultipleChoiceFilter(choices=CloudflareSSLModeChoices, null_value=None)
 
     class Meta:
         model = CloudflareZoneSettings

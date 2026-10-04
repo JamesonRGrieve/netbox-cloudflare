@@ -176,12 +176,13 @@ class CloudflareZoneSettingsSerializer(NetBoxModelSerializer):
             "display",
             "zone",
             "bot_fight_mode",
+            "ssl_mode",
             "tags",
             "custom_fields",
             "created",
             "last_updated",
         ]
-        brief_fields = ["bot_fight_mode", "display", "id", "url", "zone"]
+        brief_fields = ["bot_fight_mode", "display", "id", "ssl_mode", "url", "zone"]
 
 
 class CloudflareMonitorSerializer(NetBoxModelSerializer):

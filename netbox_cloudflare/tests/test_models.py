@@ -49,6 +49,18 @@ class CloudflareZoneSettingsModelTest(TestCase):
         self.assertIn("/plugins/cloudflare/zone-settings/", s.get_absolute_url())
         self.assertEqual(self.zone.cloudflare_settings, s)
 
+    def test_ssl_mode_defaults_unset_and_validates_choices(self):
+        s = CloudflareZoneSettings.objects.create(zone=self.zone)
+        self.assertIsNone(s.ssl_mode)
+        s.ssl_mode = "strict"
+        s.full_clean()
+        s.save()
+        s.refresh_from_db()
+        self.assertEqual(s.ssl_mode, "strict")
+        s.ssl_mode = "bogus"
+        with self.assertRaises(ValidationError):
+            s.full_clean()
+
     def test_one_row_per_zone(self):
         CloudflareZoneSettings.objects.create(zone=self.zone)
         with self.assertRaises(IntegrityError), transaction.atomic():

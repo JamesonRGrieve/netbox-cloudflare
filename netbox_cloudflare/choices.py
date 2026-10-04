@@ -25,6 +25,24 @@ class CloudflareRecordTypeChoices(ChoiceSet):
     ]
 
 
+class CloudflareSSLModeChoices(ChoiceSet):
+    """Zone SSL/TLS encryption mode (edge -> origin), as the provider's zone `ssl` setting.
+
+    ``strict`` needs the origin to present a valid certificate for the hostname; ``flexible``
+    reaches the origin over plain http, which loops against an origin that redirects to https."""
+
+    OFF = "off"
+    FLEXIBLE = "flexible"
+    FULL = "full"
+    STRICT = "strict"
+    CHOICES = [
+        (OFF, "Off", "red"),
+        (FLEXIBLE, "Flexible", "orange"),
+        (FULL, "Full", "blue"),
+        (STRICT, "Full (strict)", "green"),
+    ]
+
+
 class CloudflareWAFPhaseChoices(ChoiceSet):
     """Cloudflare ruleset phase the rule deploys into."""
 

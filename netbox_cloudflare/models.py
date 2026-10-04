@@ -33,6 +33,7 @@ from .choices import (
     CloudflareMonitorMethodChoices,
     CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
+    CloudflareSSLModeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
 )
@@ -341,6 +342,13 @@ class CloudflareZoneSettings(NetBoxModel):
     bot_fight_mode = models.BooleanField(
         default=True,
         help_text="Cloudflare Bot Fight Mode (zone-wide). Cannot be bypassed by WAF skip rules.",
+    )
+    ssl_mode = models.CharField(
+        max_length=10,
+        choices=CloudflareSSLModeChoices,
+        blank=True,
+        null=True,
+        help_text="SSL/TLS encryption mode (edge -> origin). Empty: the zone keeps its live mode.",
     )
 
     class Meta:

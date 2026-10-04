@@ -14,6 +14,7 @@ from .choices import (
     CloudflareLBSteeringChoices,
     CloudflareMonitorTypeChoices,
     CloudflareRecordTypeChoices,
+    CloudflareSSLModeChoices,
     CloudflareWAFActionChoices,
     CloudflareWAFPhaseChoices,
 )
@@ -155,11 +156,11 @@ class CloudflareWAFRuleFilterForm(NetBoxModelFilterSetForm):
 class CloudflareZoneSettingsForm(NetBoxModelForm):
     zone = DynamicModelChoiceField(queryset=Zone.objects.all())
 
-    fieldsets = (FieldSet("zone", "bot_fight_mode", name="Zone Settings"),)
+    fieldsets = (FieldSet("zone", "bot_fight_mode", "ssl_mode", name="Zone Settings"),)
 
     class Meta:
         model = CloudflareZoneSettings
-        fields = ["zone", "bot_fight_mode", "tags"]
+        fields = ["zone", "bot_fight_mode", "ssl_mode", "tags"]
 
 
 class CloudflareZoneSettingsFilterForm(NetBoxModelFilterSetForm):
@@ -168,6 +169,7 @@ class CloudflareZoneSettingsFilterForm(NetBoxModelFilterSetForm):
         queryset=Zone.objects.all(), required=False, label="Zone"
     )
     bot_fight_mode = forms.NullBooleanField(required=False)
+    ssl_mode = forms.MultipleChoiceField(choices=CloudflareSSLModeChoices, required=False)
     tag = TagFilterField(CloudflareZoneSettings)
 
 

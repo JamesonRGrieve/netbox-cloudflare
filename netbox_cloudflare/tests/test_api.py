@@ -185,8 +185,8 @@ class CloudflareWAFRuleAPITest(*_CRUD):
 
 class CloudflareZoneSettingsAPITest(*_CRUD):
     model = CloudflareZoneSettings
-    brief_fields = ["bot_fight_mode", "display", "id", "url", "zone"]
-    bulk_update_data = {"bot_fight_mode": False}
+    brief_fields = ["bot_fight_mode", "display", "id", "ssl_mode", "url", "zone"]
+    bulk_update_data = {"bot_fight_mode": False, "ssl_mode": "full"}
 
     @classmethod
     def setUpTestData(cls):
@@ -195,8 +195,8 @@ class CloudflareZoneSettingsAPITest(*_CRUD):
         )
         cls.create_data = [
             {"zone": make_zone("zs-new0.example").pk},
-            {"zone": make_zone("zs-new1.example").pk, "bot_fight_mode": False},
-            {"zone": make_zone("zs-new2.example").pk, "bot_fight_mode": True},
+            {"zone": make_zone("zs-new1.example").pk, "bot_fight_mode": False, "ssl_mode": "strict"},
+            {"zone": make_zone("zs-new2.example").pk, "bot_fight_mode": True, "ssl_mode": "full"},
         ]
 
 
