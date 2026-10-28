@@ -178,6 +178,7 @@ class CloudflareZoneSettingsSerializer(NetBoxModelSerializer):
             "zone",
             "bot_fight_mode",
             "ssl_mode",
+            "dnssec",
             "tags",
             "custom_fields",
             "created",

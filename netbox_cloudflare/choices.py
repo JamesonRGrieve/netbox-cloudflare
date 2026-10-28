@@ -15,6 +15,7 @@ class CloudflareRecordTypeChoices(ChoiceSet):
     TXT = "TXT"
     MX = "MX"
     SRV = "SRV"
+    CAA = "CAA"
     CHOICES = [
         (A, "A", "blue"),
         (AAAA, "AAAA", "indigo"),
@@ -22,6 +23,7 @@ class CloudflareRecordTypeChoices(ChoiceSet):
         (TXT, "TXT", "gray"),
         (MX, "MX", "orange"),
         (SRV, "SRV", "purple"),
+        (CAA, "CAA", "green"),
     ]
 
 

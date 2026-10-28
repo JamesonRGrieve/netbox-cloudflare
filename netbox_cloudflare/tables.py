@@ -133,12 +133,13 @@ class CloudflareZoneSettingsTable(NetBoxTable):
     zone = tables.Column(linkify=True)
     bot_fight_mode = columns.BooleanColumn()
     ssl_mode = columns.ChoiceFieldColumn()
+    dnssec = columns.BooleanColumn()
     tags = columns.TagColumn(url_name="plugins:netbox_cloudflare:cloudflarezonesettings_list")
 
     class Meta(NetBoxTable.Meta):
         model = CloudflareZoneSettings
-        fields = ("pk", "id", "zone", "bot_fight_mode", "ssl_mode", "tags", "created", "last_updated")
-        default_columns = ("pk", "zone", "bot_fight_mode", "ssl_mode")
+        fields = ("pk", "id", "zone", "bot_fight_mode", "ssl_mode", "dnssec", "tags", "created", "last_updated")
+        default_columns = ("pk", "zone", "bot_fight_mode", "ssl_mode", "dnssec")
 
 
 class CloudflareMonitorTable(NetBoxTable):

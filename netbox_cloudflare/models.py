@@ -357,6 +357,10 @@ class CloudflareZoneSettings(NetBoxModel):
         null=True,
         help_text="SSL/TLS encryption mode (edge -> origin). Empty: the zone keeps its live mode.",
     )
+    dnssec = models.BooleanField(
+        default=False,
+        help_text="Sign the zone with Cloudflare DNSSEC. The registrar must then publish the zone's DS record.",
+    )
 
     class Meta:
         ordering = ["zone"]

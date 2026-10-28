@@ -64,7 +64,7 @@ FKs `netbox_pf`'s `Alias` — the same named-list primitive the firewall uses �
 | File | Responsibility |
 |------|----------------|
 | `__init__.py` | `PluginConfig` — name `netbox_cloudflare`, `base_url='cloudflare'`, `required_plugins=["netbox_dns", "netbox_pf"]`, min/max NetBox version |
-| `choices.py` | `CloudflareRecordTypeChoices` (A/AAAA/CNAME/TXT/MX/SRV), `CloudflareWAFPhaseChoices`, `CloudflareWAFActionChoices` — values match the `cloudflare/cloudflare` provider |
+| `choices.py` | `CloudflareRecordTypeChoices` (A/AAAA/CNAME/TXT/MX/SRV/CAA; CAA content is `<flags> <tag> "<value>"`), `CloudflareWAFPhaseChoices`, `CloudflareWAFActionChoices` — values match the `cloudflare/cloudflare` provider |
 | `models.py` | The four models (see §Models) |
 | `migrations/` | hand-authored (NetBox disables `makemigrations` in prod); verify with `makemigrations --check --dry-run` on an ephemeral NetBox |
 | `api/serializers.py`, `api/views.py`, `api/urls.py` | REST API (`NetBoxModelViewSet`) — endpoints `tunnels`, `ingress-rules`, `records`, `waf-rules`, `zone-settings` under `/api/plugins/cloudflare/` |
@@ -89,7 +89,8 @@ FKs `netbox_pf`'s `Alias` — the same named-list primitive the firewall uses �
   the firewall uses, referenced as `$<alias name>` in the expression). `UniqueConstraint(zone,
   order)`.
 - **CloudflareZoneSettings**: OneToOne `netbox_dns.Zone` (CASCADE, `cloudflare_settings`),
-  `bot_fight_mode` (default True). One row of zone-wide toggles per zone.
+  `bot_fight_mode` (default True), `ssl_mode` (null = keep live), `dnssec` (default False). One row of
+  zone-wide toggles per zone.
 
 `zone` is PROTECT on records (a referenced zone can't be deleted out from under a record) and
 CASCADE on WAF rules (drop the zone, its rules go); `tunnel` CASCADEs ingress and SET_NULLs records;
@@ -116,7 +117,8 @@ old config-context reads:
   `$<alias name>` — replacing the `security.custom_rules` / `exemption_ips` config-context keys in
   `cloudflare.tf`.
 - **Zone toggles** — `CloudflareZoneSettings.bot_fight_mode` feeds `cloudflare_bot_management`
-  (`fight_mode`) per zone. Every active pipeline-owned zone carries a row; the module fails the plan
+  (`fight_mode`) per zone; `dnssec` feeds `cloudflare_zone_dnssec` (the zone's DS record is an output for
+  the registrar). Every active pipeline-owned zone carries a row; the module fails the plan
   on a missing one rather than leave the zone's live setting unmanaged.
 
 ---

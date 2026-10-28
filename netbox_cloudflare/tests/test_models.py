@@ -61,6 +61,15 @@ class CloudflareZoneSettingsModelTest(TestCase):
         with self.assertRaises(ValidationError):
             s.full_clean()
 
+    def test_dnssec_defaults_off(self):
+        s = CloudflareZoneSettings.objects.create(zone=self.zone)
+        self.assertFalse(s.dnssec)
+        s.dnssec = True
+        s.full_clean()
+        s.save()
+        s.refresh_from_db()
+        self.assertTrue(s.dnssec)
+
     def test_one_row_per_zone(self):
         CloudflareZoneSettings.objects.create(zone=self.zone)
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -137,6 +146,14 @@ class CloudflareRecordModelTest(TestCase):
         self.assertTrue(r.proxied)
         self.assertEqual(r.ttl, 1)
         self.assertEqual(r.get_type_color(), "blue")
+
+    def test_caa_record_validates(self):
+        r = CloudflareRecord(
+            zone=self.zone, name="@", type=CloudflareRecordTypeChoices.CAA, content='0 issue "letsencrypt.org"', proxied=False
+        )
+        r.full_clean()
+        r.save()
+        self.assertEqual(r.get_type_color(), "green")
 
     def test_clean_static_content_ok(self):
         r = CloudflareRecord(

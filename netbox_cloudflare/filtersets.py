@@ -109,7 +109,7 @@ class CloudflareZoneSettingsFilterSet(NetBoxModelFilterSet):
 
     class Meta:
         model = CloudflareZoneSettings
-        fields = ["id", "bot_fight_mode"]
+        fields = ["id", "bot_fight_mode", "dnssec"]
 
     def search(self, queryset, name, value):
         return queryset.filter(zone__name__icontains=value)
