@@ -79,7 +79,7 @@ FKs `netbox_pf`'s `Alias` â€” the same named-list primitive the firewall uses â€
   catch-all), `path` (blank), `service`, `order`, `origin_request` (JSON). `UniqueConstraint(tunnel,
   order)`. The ordered cloudflared ingress list; last entry is the `http_status:404` catch-all.
 - **CloudflareRecord**: FK `netbox_dns.Zone` (PROTECT, `cloudflare_records`), `name`, `type`,
-  `content` (blank), `proxied`, `ttl`, `ddns_enabled`, `ddns_source` (blank), `tunnel`
+  `content` (blank, up to 2048 chars: Cloudflare's limit, fits a DKIM TXT), `proxied`, `ttl`, `ddns_enabled`, `ddns_source` (blank), `tunnel`
   (SET_NULL, null). `clean()` enforces **exactly one** of static `content` / `tunnel` / `ddns`
   drives the target, and that DDNS records carry a `ddns_source`. `UniqueConstraint(zone, name,
   type, content)`.

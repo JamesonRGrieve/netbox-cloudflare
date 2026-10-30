@@ -155,6 +155,21 @@ class CloudflareRecordModelTest(TestCase):
         r.save()
         self.assertEqual(r.get_type_color(), "green")
 
+    def test_long_txt_content_fits_and_over_2048_is_rejected(self):
+        dkim = '"v=DKIM1; k=rsa; p=' + "A" * 230 + '" "' + "B" * 160 + '"'
+        r = CloudflareRecord(
+            zone=self.zone, name="google._domainkey", type=CloudflareRecordTypeChoices.TXT, content=dkim, proxied=False
+        )
+        r.full_clean()
+        r.save()
+        r.refresh_from_db()
+        self.assertEqual(r.content, dkim)
+        too_long = CloudflareRecord(
+            zone=self.zone, name="x", type=CloudflareRecordTypeChoices.TXT, content="a" * 2049, proxied=False
+        )
+        with self.assertRaises(ValidationError):
+            too_long.full_clean()
+
     def test_clean_static_content_ok(self):
         r = CloudflareRecord(
             zone=self.zone, name="a", type=CloudflareRecordTypeChoices.A, content="203.0.113.1"

@@ -131,7 +131,8 @@ class CloudflareRecord(NetBoxModel):
     name = models.CharField(max_length=255, help_text="Record name / subdomain, or @ for apex.")
     type = models.CharField(max_length=16, choices=CloudflareRecordTypeChoices)
     content = models.CharField(
-        max_length=255, blank=True, help_text="Static target value (when not tunnel/DDNS driven)."
+        max_length=2048, blank=True,
+        help_text="Static target value (when not tunnel/DDNS driven). Up to Cloudflare's 2048-char limit, e.g. a DKIM TXT.",
     )
     proxied = models.BooleanField(
         default=True, help_text="Route through the Cloudflare edge (A/AAAA/CNAME only)."
